@@ -6,7 +6,7 @@
 /** Documents we allow the relay to list, read, change, make or delete. Never User or Setting. */
 export const ALLOWED = [
   "Actor", "Item", "Scene", "JournalEntry", "Macro", "RollTable", "Playlist", "Folder",
-  "Combat", "Combatant", "ActiveEffect", "Token", "ChatMessage"
+  "Combat", "Combatant", "ActiveEffect", "Token", "ChatMessage", "Region"
 ];
 
 const COLLECTIONS = ["Actor", "Item", "Scene", "JournalEntry", "Macro", "RollTable", "Playlist", "Folder", "Combat"];
@@ -357,7 +357,7 @@ export function makeCommands(ctx) {
       return { deleted: info };
     },
 
-    async useItem({ uuid, targets, activityId } = {}) {
+    async useItem({ uuid, targets, activityId, clearArea } = {}) {
       const item = await find(uuid);
       if (item.documentName !== "Item") throw new Error(`${uuid} is not an item.`);
       if (Array.isArray(targets)) {
@@ -369,6 +369,8 @@ export function makeCommands(ctx) {
           token.setTarget(true, { releaseOthers: false, groupSelection: true });
         }
       }
+      const startScene = game.scenes.viewed ?? game.scenes.active;
+      const before = new Set((startScene?.regions?.contents ?? []).map((r) => r.id));
       if (activityId) {
         const activity = item.system?.activities?.get?.(activityId);
         if (!activity) throw new Error(`No activity ${activityId} on ${item.name}.`);
@@ -376,7 +378,27 @@ export function makeCommands(ctx) {
       } else {
         await item.use({}, { configure: false });
       }
-      return { used: brief(item), targets: targets ?? [] };
+      const out = { used: brief(item), targets: targets ?? [] };
+      // Spells with a template leave a Region on the scene. Report it, and remove it on request.
+      const scene = game.scenes.viewed ?? game.scenes.active;
+      const made = [];
+      if (scene?.regions) {
+        for (let i = 0; i < 5 && !made.length; i++) {
+          for (const r of scene.regions.contents ?? []) {
+            if (!before.has(r.id)) made.push(r);
+          }
+          if (!made.length && clearArea) await new Promise((res) => setTimeout(res, 200));
+          else break;
+        }
+      }
+      if (made.length) {
+        out.areas = made.map(brief);
+        if (clearArea) {
+          for (const r of made) await r.delete();
+          out.areasCleared = true;
+        }
+      }
+      return out;
     },
 
     async moveToken({ uuid, x, y } = {}) {

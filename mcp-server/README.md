@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.29.8
+Version: 2026.09.29.9
 
 Lets Claude read a Foundry VTT world.
 It talks to the Foundry VTT MCP & Rest Relay add-on.

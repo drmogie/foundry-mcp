@@ -372,6 +372,7 @@ async def foundry_use_item(
     ability_uuid: str = "",
     target_uuid: str = "",
     target_name: str = "",
+    clear_area: Annotated[bool, Field(description="Remove the spell area (template) the cast leaves on the board.")] = False,
 ) -> str:
     """D&D 5e: make an actor use an item, like firing a bow. Good for testing mods."""
     if bool(ability_name) == bool(ability_uuid):
@@ -385,6 +386,7 @@ async def foundry_use_item(
             "abilityUuid": ability_uuid,
             "targetUuid": target_uuid,
             "targetName": target_name,
+            "clearArea": clear_area,
         },
     )
 

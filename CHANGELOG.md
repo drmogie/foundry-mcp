@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.10
+- Spell areas: relay 2026.09.29.11, module 2026.09.29.11, mcp-server 2026.09.29.9. Update all three.
+- Regions can be deleted through the relay. `foundry_use_item` has `clear_area` to remove the area a cast leaves, and reports any area it finds.
+
 ## 2026.09.29.9
 - Module 2026.09.29.10: status lights on the module settings page (connected, connecting, problem, off), checks for the relay address and connect key as you type, an unsaved changes note, and a Reconnect now button.
 - Relay and mcp-server are unchanged (relay 2026.09.29.10, mcp-server 2026.09.29.8).

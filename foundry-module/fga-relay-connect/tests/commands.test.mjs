@@ -259,6 +259,41 @@ test("useItem can run one activity, and complains about a missing one", async ()
   await assert.rejects(c.useItem({ uuid: "Item.i1", activityId: "nope" }), /No activity nope/);
 });
 
+test("useItem reports a spell area and can clear it", async () => {
+  const { w, c } = setup();
+  const item = w.docs.get("Item.i1");
+  const scene = w.game.scenes.viewed;
+  scene.regions = { contents: [] };
+  item.use = async () => {
+    const region = w.makeDoc("Region", "r1", { name: "Fireball" });
+    scene.regions.contents.push(region);
+  };
+  const kept = await c.useItem({ uuid: "Item.i1" });
+  assert.equal(kept.areas.length, 1);
+  assert.equal(kept.areasCleared, undefined);
+  assert.ok(w.docs.has("Region.r1"));
+  scene.regions.contents.length = 0;
+  w.docs.delete("Region.r1");
+  const cleared = await c.useItem({ uuid: "Item.i1", clearArea: true });
+  assert.equal(cleared.areasCleared, true);
+  assert.ok(!w.docs.has("Region.r1"));
+});
+
+test("useItem with no area leaves out the areas note", async () => {
+  const { w, c } = setup();
+  w.docs.get("Item.i1").use = async () => {};
+  w.game.scenes.viewed.regions = { contents: [] };
+  const r = await c.useItem({ uuid: "Item.i1", clearArea: true });
+  assert.equal(r.areas, undefined);
+});
+
+test("a Region can be deleted through the relay", async () => {
+  const { w, c } = setup();
+  w.makeDoc("Region", "r9", { name: "Old" });
+  const r = await c.delete({ uuid: "Region.r9" });
+  assert.equal(r.deleted.name, "Old");
+});
+
 // ----- files and chat flavor -----
 
 function withFiles(overrides = {}) {
