@@ -96,25 +96,10 @@ def last(relay):
 
 # ----- which client is used -----
 
-def test_fga_token_picks_the_fga_client(monkeypatch):
-    monkeypatch.setenv("FOUNDRY_API_KEY", "fgat_abc")
-    monkeypatch.delenv("FOUNDRY_RELAY_KIND", raising=False)
-    assert isinstance(server.make_client(), FgaClient)
-
-
-def test_other_keys_keep_using_threehats(monkeypatch):
-    monkeypatch.setenv("FOUNDRY_API_KEY", "abc123")
-    monkeypatch.delenv("FOUNDRY_RELAY_KIND", raising=False)
-    assert type(server.make_client()) is RelayClient
-
-
-def test_kind_can_force_either_one(monkeypatch):
-    monkeypatch.setenv("FOUNDRY_API_KEY", "fgat_abc")
-    monkeypatch.setenv("FOUNDRY_RELAY_KIND", "threehats")
-    assert type(server.make_client()) is RelayClient
-    monkeypatch.setenv("FOUNDRY_API_KEY", "whatever")
-    monkeypatch.setenv("FOUNDRY_RELAY_KIND", "fga")
-    assert isinstance(server.make_client(), FgaClient)
+def test_make_client_is_always_the_fga_client(monkeypatch):
+    for key in ("fgat_abc", "abc123", ""):
+        monkeypatch.setenv("FOUNDRY_API_KEY", key)
+        assert isinstance(server.make_client(), FgaClient)
 
 
 def test_default_address_is_the_lan_relay(monkeypatch):

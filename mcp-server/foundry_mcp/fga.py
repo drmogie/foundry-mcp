@@ -1,4 +1,4 @@
-"""Client for our own FGA relay. It speaks the same interface as the ThreeHats client,
+"""Client for our own FGA relay. It keeps the same call style as the base client,
 so every tool keeps its name and its answers keep their shape as far as we can."""
 
 from __future__ import annotations

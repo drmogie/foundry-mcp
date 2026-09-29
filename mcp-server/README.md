@@ -1,9 +1,9 @@
 # Foundry MCP server
 
-Version: 2026.09.28.10
+Version: 2026.09.29.4
 
 Lets Claude read a Foundry VTT world.
-It talks to the ThreeHats relay add-on.
+It talks to our own FGA relay add-on.
 By default it is read-only. Nothing changes your world.
 Write tools exist, but they are off until you turn them on. See "Write tools" below.
 
@@ -24,31 +24,29 @@ Write tools exist, but they are off until you turn them on. See "Write tools" be
 - foundry_get_effects: active effects on an actor or token
 - foundry_list_files: files in Foundry's data folders
 - foundry_read_file: read one text file, such as a mod's module.json
-- foundry_activity_log: what each API token changed lately (our own relay only)
+- foundry_activity_log: what each API token changed lately
 
 ## Settings
 
 Set these as environment variables.
 
-- FOUNDRY_API_KEY (required): the key from the relay dashboard.
-- FOUNDRY_RELAY_URL: the relay address. Default is `http://ha-pi4:3010`.
+- FOUNDRY_API_KEY (required): a token from the FGA relay page. It starts with `fgat_`.
+- FOUNDRY_RELAY_URL: the relay address. Default is `https://rest-relay.mogie.io` (home network only).
 - FOUNDRY_CLIENT_ID: which world to use. Leave it empty when only one world is online.
 
 - FOUNDRY_DOWNLOAD_DIR (optional): turns on one extra tool, described below.
 
 Tip: make a scoped key on the relay dashboard with read scopes only.
 
-## Use our own relay (FGA relay)
+## The relay
 
-The same tools work with our own relay. Nothing else changes.
+This server only talks to our own FGA relay. ThreeHats is gone.
 
 - Make a token on the relay web page. It starts with `fgat_`.
 - Set FOUNDRY_API_KEY to that token.
-- Set FOUNDRY_RELAY_URL if not `https://rest-relay.mogie.io`.
-- The token type is picked for you. To force it, set FOUNDRY_RELAY_KIND to `fga` or `threehats`.
+- Set FOUNDRY_RELAY_URL only if the relay is not at `https://rest-relay.mogie.io`.
 - Writes use the same switch and world limit as before.
 - The relay also limits writes. Use a write token.
-- ThreeHats stays as a backup. Change the key back to switch.
 
 ## Write tools (optional, off by default)
 
@@ -62,10 +60,10 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twelve tools appear:
 - foundry_switch_scene: make a scene active
 - foundry_use_item: D&D 5e, make an actor use an item (good for testing mods)
 - foundry_move_token: move a token
-- foundry_start_combat: make a combat, add tokens, roll initiative, start (our own relay only)
-- foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true` (our own relay only)
-- foundry_rest: long or short rest with D&D 5e rules (our own relay only)
-- foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules (our own relay only)
+- foundry_start_combat: make a combat, add tokens, roll initiative, start
+- foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true`
+- foundry_rest: long or short rest with D&D 5e rules
+- foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules
 
 Safety rules:
 
@@ -95,7 +93,7 @@ It does not change Foundry. It only copies files out.
 ```
 claude mcp add foundry \
   --env FOUNDRY_API_KEY=YOUR_KEY \
-  --env FOUNDRY_RELAY_URL=http://ha-pi4:3010 \
+  --env FOUNDRY_RELAY_URL=https://rest-relay.mogie.io \
   -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/77b29bbf812b6a8035f53969e504774972c0880e.zip#subdirectory=mcp-server" foundry-mcp
 ```
 
@@ -109,7 +107,7 @@ Open the config file and add this under `mcpServers`:
   "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/77b29bbf812b6a8035f53969e504774972c0880e.zip#subdirectory=mcp-server", "foundry-mcp"],
   "env": {
     "FOUNDRY_API_KEY": "YOUR_KEY",
-    "FOUNDRY_RELAY_URL": "http://ha-pi4:3010"
+    "FOUNDRY_RELAY_URL": "https://rest-relay.mogie.io"
   }
 }
 ```

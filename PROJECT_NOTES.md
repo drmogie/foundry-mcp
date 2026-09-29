@@ -130,3 +130,10 @@
 - Reading current hit points: foundry_apply_damage with amount 0 shows before and after without changing anything (it does add a log line).
 - The Foundry link stalled a few times. A call that times out may still have run. Check state before repeating (combat turn, hit points).
 - New: rest command (module), POST /api/v1/rest (relay), foundry_rest tool.
+
+## 2026-09-29: ThreeHats removed (mcp-server 2026.09.29.4)
+
+- Removed: the ThreeHats add-on (98c65e63_foundry_relay) on ha-pi4, the NPM host relay.mogie.io on ha-pi4, the `foundry-relay/` folder and its build workflow.
+- MCP server: always uses FgaClient. The old RelayClient class stays as the shared base only.
+- Still to do by hand: turn off or remove the ThreeHats module in the MCP Test world; remove any DNS record or Cloudflare name for relay.mogie.io; delete the two ghcr.io packages (aarch64-addon-foundry-relay and amd64-addon-foundry-relay) if wanted.
+- ha-blue was not touched.

@@ -1,4 +1,4 @@
-"""Foundry MCP server. Tools for a Foundry VTT world via our own FGA relay or the ThreeHats relay."""
+"""Foundry MCP server. Tools for a Foundry VTT world via our own FGA relay."""
 
 from __future__ import annotations
 
@@ -27,12 +27,8 @@ _client: RelayClient | None = None
 
 
 def make_client() -> RelayClient:
-    """Our own FGA relay when the key is one of its tokens (fgat_...) or FOUNDRY_RELAY_KIND=fga. Else ThreeHats."""
-    kind = os.environ.get("FOUNDRY_RELAY_KIND", "").strip().lower()
-    key = os.environ.get("FOUNDRY_API_KEY", "")
-    if kind == "fga" or (kind != "threehats" and key.startswith("fgat_")):
-        return FgaClient()
-    return RelayClient()
+    """Always our own FGA relay."""
+    return FgaClient()
 
 
 def client() -> RelayClient:

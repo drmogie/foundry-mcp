@@ -1,4 +1,4 @@
-"""Small async client for the ThreeHats Foundry REST API relay."""
+"""Base async client. FgaClient (fga.py) builds on it and talks to our own FGA relay."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-DEFAULT_RELAY_URL = "http://ha-pi4:3010"
+DEFAULT_RELAY_URL = "https://rest-relay.mogie.io"
 MAX_CHARS = 60_000
 
 

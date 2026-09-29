@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.09.29.4
+- Removed ThreeHats. The `foundry-relay` add-on folder and its build workflow are gone.
+- The MCP server now always uses our own FGA relay. `FOUNDRY_RELAY_KIND` no longer does anything.
+- Default relay address is `https://rest-relay.mogie.io`.
+
 ## 2026.09.28.10
 - Zip code for the install link: `77b29bbf812b6a8035f53969e504774972c0880e`
 - New: 8 write tools, off unless `FOUNDRY_ALLOW_WRITES` is set.
