@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from . import __version__, auth
 from .hub import Client, Hub, HubError
 from .settings import Settings, load_connect_key, new_connect_key, session_secret
+from .tokens import Token, TokenError, TokenStore
 
 log = logging.getLogger("fga-relay")
 STATIC = Path(__file__).parent / "static"
@@ -27,6 +28,13 @@ class LoginBody(BaseModel):
     password: str = ""
 
 
+class TokenBody(BaseModel):
+    name: str = ""
+    scope: str = "read"
+    worldId: str | None = None
+    expiresDays: int | None = None
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     app = FastAPI(title="FGA Relay", version=__version__, docs_url=None, redoc_url=None)
@@ -35,8 +43,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     limiter = auth.LoginLimiter()
     state: dict[str, Any] = {"connect_key": load_connect_key(settings)}
 
+    tokens = TokenStore(settings.data_dir / "tokens.db")
+
     app.state.settings = settings
     app.state.hub = hub
+    app.state.tokens = tokens
 
     def who(request: Request) -> str:
         return request.client.host if request.client else "unknown"
@@ -51,6 +62,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not user:
             raise HTTPException(status_code=401, detail="Please log in.")
         return user
+
+    def api_token(request: Request, needed: str = "read") -> Token:
+        """Check the x-api-key header (or Authorization: Bearer) for the /api/v1 routes."""
+        offered = request.headers.get("x-api-key")
+        if not offered:
+            bearer = request.headers.get("authorization", "")
+            if bearer.lower().startswith("bearer "):
+                offered = bearer[7:].strip()
+        rec = tokens.verify(offered)
+        if rec is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Missing, wrong or expired API token. Send it in the x-api-key header.",
+            )
+        if not rec.allows(needed):
+            raise HTTPException(status_code=403, detail="This token is read only. Make a token with write access.")
+        return rec
+
+    def pick_client(rec: Token | None, client_id: str | None) -> Client:
+        """Pick the Foundry client, honoring a token's world limit."""
+        if rec is not None and rec.world_id:
+            matches = [c for c in hub.clients.values() if c.info.get("worldId") == rec.world_id]
+            if client_id:
+                matches = [c for c in matches if c.client_id == client_id]
+            if not matches:
+                raise HubError(f"No Foundry client is connected for world {rec.world_id}, which this token is limited to.")
+            if len(matches) > 1:
+                raise HubError("More than one Foundry client is connected. Say which one with client_id.")
+            return matches[0]
+        return hub.pick(client_id)
 
     def ws_url(request: Request) -> str:
         proto = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -136,6 +177,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "clientId": client.client_id,
             "reply": reply,
         }
+
+    # ----- token management (web page login) -----
+
+    @app.get("/api/tokens")
+    async def list_tokens(request: Request) -> dict[str, Any]:
+        require_user(request)
+        now = time.time()
+        return {"tokens": [t.public(now) for t in tokens.list()]}
+
+    @app.post("/api/tokens")
+    async def create_token(body: TokenBody, request: Request) -> dict[str, Any]:
+        require_user(request)
+        try:
+            secret_value, rec = tokens.create(
+                body.name, body.scope, body.worldId, body.expiresDays
+            )
+        except TokenError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"token": secret_value, "info": rec.public()}
+
+    @app.delete("/api/tokens/{token_id}")
+    async def delete_token(token_id: int, request: Request) -> dict[str, Any]:
+        require_user(request)
+        if not tokens.delete(token_id):
+            raise HTTPException(status_code=404, detail="That token is already gone.")
+        return {"ok": True}
+
+    # ----- REST API (API token) -----
+
+    @app.get("/api/v1/whoami")
+    async def whoami(request: Request) -> dict[str, Any]:
+        rec = api_token(request, "read")
+        return {"token": rec.public(), "relayVersion": __version__}
+
+    @app.get("/api/v1/clients")
+    async def v1_clients(request: Request) -> dict[str, Any]:
+        rec = api_token(request, "read")
+        clients = [c.public() for c in hub.clients.values() if not rec.world_id or c.info.get("worldId") == rec.world_id]
+        return {"clients": clients}
+
+    @app.post("/api/v1/ping")
+    async def v1_ping(request: Request, client_id: str | None = None) -> dict[str, Any]:
+        rec = api_token(request, "read")
+        try:
+            client = pick_client(rec, client_id)
+            started = time.perf_counter()
+            reply = await hub.request(client, "ping")
+        except HubError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {"ok": True, "ms": round((time.perf_counter() - started) * 1000), "clientId": client.client_id, "reply": reply}
 
     @app.websocket("/ws/module")
     async def module_socket(ws: WebSocket) -> None:

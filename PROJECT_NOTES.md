@@ -80,3 +80,12 @@
 - Not done yet: Docker image build (no Docker daemon here; GitHub Actions workflow added), install on ha-pi4, real Foundry test.
 - Next: Stage 2 tokens, Stage 3 REST routes, then point the MCP server at it.
 - Lesson: test the socket with a real server, not a threaded TestClient (it hangs).
+
+## 2026-09-29: Stage 2 tokens (2026.09.29.2)
+
+- Installed Stage 1 on ha-pi4 and linked the MCP Test world. NPM host `rest-relay.mogie.io` -> homeassistant:3011, LAN only (allow 172.16.1.x, 30.x; 403 for the Cloudflare Tunnel header). `relay.mogie.io` stays on ThreeHats (3010).
+- Tokens: SQLite in /data/tokens.db, hashed, scope read or write, optional world and expiry, last used. Header `x-api-key` or Bearer.
+- Routes: /api/tokens (web login) and /api/v1/whoami, /clients, /ping (token).
+- 36 relay tests pass. A real browser test (Chromium) found a duplicate element id that broke the world dropdown. Fixed.
+- Lesson: click through the real page, not only the API tests.
+- Next: Stage 3 REST routes (actors, items, scenes, chat, rolls) and matching module commands.

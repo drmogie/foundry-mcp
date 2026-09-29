@@ -1,6 +1,6 @@
 # FGA Relay
 
-Version: 2026.09.29.1
+Version: 2026.09.29.2
 
 Our own relay between Foundry VTT and tools like Claude.
 It is the REST API. The MCP server sits on top of it.
@@ -12,8 +12,24 @@ It is the REST API. The MCP server sits on top of it.
 - Copy boxes for the relay address and the connect key.
 - A "Test the link" button that shows the round trip time.
 - Make a new connect key at any time.
+- API tokens: read only or read and write, limited to one world if you like, with an optional expiry. Each token shows once. The page lists them with last used time and a Revoke button.
 
 REST routes for actors, items, rolls and the rest come next.
+
+## API tokens
+Make one on the relay page. Send it in the `x-api-key` header, or as `Authorization: Bearer <token>`.
+
+Routes today:
+- GET /api/v1/whoami shows which token you are using.
+- GET /api/v1/clients lists connected Foundry clients (only the token's world if it is limited).
+- POST /api/v1/ping tests the link to Foundry.
+
+Example:
+
+    curl -H "x-api-key: fgat_..." https://rest-relay.mogie.io/api/v1/whoami
+
+A read token can read. A write token can read and write. A world limited token only sees its own world.
+Tokens are stored as a hash in /data/tokens.db, so nobody can read one back, not even from a backup.
 
 ## Install (Home Assistant add-on)
 - Add this repository to the add-on store: https://github.com/drmogie/foundry-mcp

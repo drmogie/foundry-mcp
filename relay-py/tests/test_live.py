@@ -124,3 +124,47 @@ async def test_second_connection_with_same_id_replaces_first(relay):
             clients = (await http.get("/api/status")).json()["clients"]
             assert len(clients) == 1
     await http.aclose()
+
+
+async def make_token(http, **body):
+    r = await http.post("/api/tokens", json=body)
+    assert r.status_code == 200
+    return r.json()["token"]
+
+
+@pytest.mark.asyncio
+async def test_v1_ping_round_trips_with_token(relay):
+    http, key = await logged_in(relay)
+    token = await make_token(http, name="Claude")
+    api = httpx.AsyncClient(base_url=f"http://{relay}", headers={"x-api-key": token})
+    async with websockets.connect(f"ws://{relay}/ws/module?key={key}") as ws:
+        await ws.send(json.dumps(hello()))
+        await ws.recv()
+
+        async def foundry():
+            req = json.loads(await ws.recv())
+            await ws.send(json.dumps({"id": req["id"], "ok": True, "data": {"pong": True}}))
+
+        task = asyncio.create_task(foundry())
+        r = await api.post("/api/v1/ping")
+        await task
+        assert r.status_code == 200 and r.json()["reply"] == {"pong": True}
+        assert [c["worldId"] for c in (await api.get("/api/v1/clients")).json()["clients"]] == ["mcp-test"]
+    await api.aclose()
+    await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_world_limited_token_only_sees_its_world(relay):
+    http, key = await logged_in(relay)
+    token = await make_token(http, name="Other world", worldId="some-other-world")
+    api = httpx.AsyncClient(base_url=f"http://{relay}", headers={"x-api-key": token})
+    async with websockets.connect(f"ws://{relay}/ws/module?key={key}") as ws:
+        await ws.send(json.dumps(hello()))
+        await ws.recv()
+        assert (await api.get("/api/v1/clients")).json()["clients"] == []
+        r = await api.post("/api/v1/ping")
+        assert r.status_code == 502
+        assert "some-other-world" in r.json()["detail"]
+    await api.aclose()
+    await http.aclose()

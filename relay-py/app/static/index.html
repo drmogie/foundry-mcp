@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FGA Relay</title>
+<link rel="icon" href="data:,">
 <style>
   :root {
     --bg: #f4f1ec; --card: #ffffff; --text: #1d1b19; --muted: #6a645c; --line: #ddd6cc;
@@ -22,12 +23,12 @@
   .muted { color: var(--muted); font-size: 0.9rem; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; }
   label { display: block; font-weight: 600; margin: 12px 0 4px; }
-  input { width: 100%; padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid var(--line);
+  input, select { width: 100%; padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid var(--line);
           background: var(--bg); color: var(--text); }
   button { font: inherit; font-weight: 600; padding: 12px 18px; border-radius: 8px; border: 1px solid var(--line);
            background: var(--card); color: var(--text); cursor: pointer; }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .row { display: flex; gap: 8px; align-items: stretch; }
   .row input { flex: 1; font-family: ui-monospace, monospace; font-size: 0.9rem; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
@@ -39,6 +40,7 @@
   .msg { min-height: 1.5em; margin-top: 8px; font-size: 0.95rem; }
   .msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); }
   ol { padding-left: 22px; margin: 0; } li { margin-bottom: 6px; }
+  select { font-family: inherit; }
   .hidden { display: none !important; }
   header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 </style>
@@ -96,6 +98,37 @@
     </section>
 
     <section class="card">
+      <h2>API tokens</h2>
+      <p>Tokens let tools like Claude use the API. Each token shows only once, so copy it right away.</p>
+      <form id="tokenForm">
+        <label for="tName">Name</label>
+        <input id="tName" maxlength="60" placeholder="For example: Claude" required>
+        <label for="tScope">Access</label>
+        <select id="tScope">
+          <option value="read">Read only</option>
+          <option value="write">Read and write</option>
+        </select>
+        <label for="tokenWorld">World</label>
+        <select id="tokenWorld"><option value="">Any world</option></select>
+        <label for="tExpires">Expires</label>
+        <select id="tExpires">
+          <option value="">Never</option>
+          <option value="30">In 30 days</option>
+          <option value="90">In 90 days</option>
+          <option value="365">In 1 year</option>
+        </select>
+        <div class="actions"><button class="primary" type="submit">Make token</button></div>
+        <div class="msg" id="tokenMsg" role="status"></div>
+      </form>
+      <div id="newToken" class="hidden" style="margin-top:12px">
+        <label for="tokenValue">Your new token. Copy it now.</label>
+        <div class="row"><input id="tokenValue" readonly><button id="copyToken" type="button">Copy</button></div>
+      </div>
+      <h2 style="margin-top:20px">Your tokens</h2>
+      <div id="tokenList" class="muted">None yet.</div>
+    </section>
+
+    <section class="card">
       <h2>Connected clients</h2>
       <div id="clients" class="muted">None yet.</div>
     </section>
@@ -135,6 +168,7 @@ async function refresh() {
     const s = await api("/api/status");
     light("dRelay", "tRelay", "ok", "Running");
     const clients = s.clients;
+    fillWorlds(clients);
     if (!clients.length) {
       light("dClient", "tClient", "wait", "None connected. Open Foundry and check the module settings.");
       light("dWorld", "tWorld", "wait", "Waiting for a client");
@@ -167,8 +201,77 @@ async function loadConnect() {
   $("url").value = c.url; $("key").value = c.key;
 }
 
+
+function when(seconds) {
+  if (!seconds) return "never";
+  return new Date(seconds * 1000).toLocaleString();
+}
+
+function fillWorlds(clients) {
+  const sel = $("tokenWorld");
+  const keep = sel.value;
+  const worlds = [...new Set(clients.map((c) => c.worldId).filter(Boolean))];
+  sel.textContent = "";
+  const any = document.createElement("option"); any.value = ""; any.textContent = "Any world"; sel.append(any);
+  for (const w of worlds) { const o = document.createElement("option"); o.value = w; o.textContent = w; sel.append(o); }
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+
+async function loadTokens() {
+  const { tokens } = await api("/api/tokens");
+  const box = $("tokenList");
+  box.textContent = "";
+  if (!tokens.length) { box.textContent = "None yet."; return; }
+  for (const t of tokens) {
+    const d = document.createElement("div");
+    d.className = "light";
+    const dot = document.createElement("span"); dot.className = "dot " + (t.expired ? "bad" : "ok");
+    const wrap = document.createElement("div"); wrap.style.flex = "1";
+    const b = document.createElement("b"); b.textContent = t.name;
+    const m = document.createElement("span"); m.className = "muted";
+    m.textContent = [
+      t.scope === "write" ? "Read and write" : "Read only",
+      t.worldId ? "World " + t.worldId : "Any world",
+      t.expired ? "Expired" : (t.expiresAt ? "Expires " + when(t.expiresAt) : "Never expires"),
+      "Last used " + (t.lastUsedAt ? when(t.lastUsedAt) : "never"),
+      t.hint
+    ].join(". ");
+    wrap.append(b, m);
+    const del = document.createElement("button"); del.type = "button"; del.textContent = "Revoke";
+    del.addEventListener("click", async () => {
+      if (!confirm("Revoke " + t.name + "? Anything using it stops working.")) return;
+      await api("/api/tokens/" + t.id, { method: "DELETE" });
+      loadTokens();
+    });
+    d.append(dot, wrap, del); box.append(d);
+  }
+}
+
+$("tokenForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("tokenMsg"); msg.className = "msg"; msg.textContent = "";
+  try {
+    const days = $("tExpires").value;
+    const r = await api("/api/tokens", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("tName").value, scope: $("tScope").value,
+        worldId: $("tokenWorld").value || null, expiresDays: days ? Number(days) : null }) });
+    $("tokenValue").value = r.token;
+    $("newToken").classList.remove("hidden");
+    $("tName").value = "";
+    msg.className = "msg ok"; msg.textContent = "Token made. Copy it now. It will not show again.";
+    loadTokens();
+  } catch (e) { msg.className = "msg bad"; msg.textContent = e.message; }
+});
+
+$("copyToken").addEventListener("click", async () => {
+  const input = $("tokenValue"); const msg = $("tokenMsg");
+  try { await navigator.clipboard.writeText(input.value); msg.className = "msg ok"; msg.textContent = "Copied."; }
+  catch (e) { input.select(); msg.className = "msg"; msg.textContent = "Press Ctrl+C to copy the selected text."; }
+});
+
 async function start() {
   clearInterval(timer);
+  $("newToken").classList.add("hidden"); $("tokenValue").value = "";
   const s = await api("/api/session");
   $("version").textContent = "Version " + s.version;
   if (!s.configured) return show("setup");
@@ -176,6 +279,7 @@ async function start() {
   show("app");
   await loadConnect();
   await refresh();
+  await loadTokens();
   timer = setInterval(refresh, 3000);
 }
 

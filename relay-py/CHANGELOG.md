@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.09.29.2
+- API tokens. Make, list and revoke them on the web page.
+- Access: read only, or read and write.
+- Optional world limit and expiry date.
+- Shows last used time.
+- Only a hash is stored, so a token shows once.
+- New token routes: /api/v1/whoami, /api/v1/clients, /api/v1/ping. Header is x-api-key or Bearer.
+- Tests: 36 relay tests.
+
 ## 2026.09.29.1
 - First version of our own relay.
 - One login page. Username and password come from the add-on options. No sign-up.
