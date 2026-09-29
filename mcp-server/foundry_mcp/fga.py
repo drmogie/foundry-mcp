@@ -1,4 +1,4 @@
-"""Client for our own FGA relay. It keeps the same call style as the base client,
+"""Client for the Foundry VTT MCP & Rest Relay. It keeps the same call style as the base client,
 so every tool keeps its name and its answers keep their shape as far as we can."""
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class FgaClient(RelayClient):
 
     async def _fga(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> Any:
         if not self.api_key:
-            raise RelayError("No API token. Set FOUNDRY_API_KEY to a token from the FGA relay page (it starts with fgat_).")
+            raise RelayError("No API token. Set FOUNDRY_API_KEY to a token from the Rest Relay page (it starts with fgat_).")
         query = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
         for key, value in list(query.items()):
             if isinstance(value, bool):
@@ -105,7 +105,7 @@ class FgaClient(RelayClient):
         name = "_get_" + endpoint.strip("/").replace("-", "_").replace("/", "_")
         handler = getattr(self, name, None)
         if handler is None:
-            raise RelayError(f"The FGA relay does not have {endpoint} yet.")
+            raise RelayError(f"The Rest Relay does not have {endpoint} yet.")
         return await handler(**params)
 
     async def _docs(self, document_type: str, q: str = "", limit: int = 50) -> dict[str, Any]:
@@ -327,7 +327,7 @@ class FgaClient(RelayClient):
                 "pack": b["pack"], "id": b["id"], "name": b.get("name"), "folder": b.get("folder"),
                 "place": bool(b.get("place")), "sceneId": b.get("sceneId"), "x": b.get("x"), "y": b.get("y"),
                 "hidden": bool(b.get("hidden"))})
-        raise RelayError(f"The FGA relay does not have {endpoint} yet. Nothing was changed.")
+        raise RelayError(f"The Rest Relay does not have {endpoint} yet. Nothing was changed.")
 
     async def _combat_create(self, b: dict[str, Any]) -> Any:
         uuids = list(b.get("tokenUuids") or [])

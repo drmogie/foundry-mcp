@@ -1,4 +1,4 @@
-"""The FGA client, against a pretend FGA relay."""
+"""The FGA client, against a pretend Rest Relay."""
 
 import base64
 import json
@@ -359,7 +359,7 @@ async def test_stage_4_tools_explain_when_not_on_our_relay(monkeypatch):
         await server.foundry_apply_damage(1, uuid="Actor.a1"),
         await server.foundry_activity_log(),
     ):
-        assert "FGA relay" in out and "fgat_" in out
+        assert "Rest Relay" in out and "fgat_" in out
 
 
 async def test_rest_by_uuid_and_by_name(relay):
@@ -375,7 +375,7 @@ async def test_rest_by_uuid_and_by_name(relay):
 
 async def test_rest_explains_when_not_on_our_relay(monkeypatch):
     monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key="k"))
-    assert "FGA relay" in await server.foundry_rest(uuid="Actor.a1")
+    assert "Rest Relay" in await server.foundry_rest(uuid="Actor.a1")
 
 
 # ----- newer tools -----
@@ -466,7 +466,7 @@ async def test_new_tools_explain_when_not_on_our_relay(monkeypatch):
         await server.foundry_roll_table(name="x"),
         await server.foundry_import_from_pack(pack="x", id="y"),
     ):
-        assert "FGA relay" in out
+        assert "Rest Relay" in out
 
 
 def test_all_new_write_tools_are_offered_when_writes_are_on():

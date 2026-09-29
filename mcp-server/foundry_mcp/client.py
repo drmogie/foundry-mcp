@@ -1,4 +1,4 @@
-"""Base async client. FgaClient (fga.py) builds on it and talks to our own FGA relay."""
+"""Base async client. FgaClient (fga.py) builds on it and talks to the Foundry VTT MCP & Rest Relay."""
 
 from __future__ import annotations
 

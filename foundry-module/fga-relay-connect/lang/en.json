@@ -13,12 +13,12 @@
       "Hint": "Turn on for one dedicated GM browser tab. Leave off for players."
     },
     "Status": {
-      "Connected": "FGA Relay: connected",
-      "Connecting": "FGA Relay: connecting...",
-      "Off": "FGA Relay: off",
-      "NoSettings": "FGA Relay: set the relay address and connect key in module settings.",
-      "BadKey": "FGA Relay: the relay rejected the connect key. Copy it again from the relay page.",
-      "Replaced": "FGA Relay: another browser took over the link."
+      "Connected": "Rest Relay: connected",
+      "Connecting": "Rest Relay: connecting...",
+      "Off": "Rest Relay: off",
+      "NoSettings": "Rest Relay: set the relay address and connect key in module settings.",
+      "BadKey": "Rest Relay: the relay rejected the connect key. Copy it again from the relay page.",
+      "Replaced": "Rest Relay: another browser took over the link."
     }
   }
 }

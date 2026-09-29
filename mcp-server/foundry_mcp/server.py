@@ -1,4 +1,4 @@
-"""Foundry MCP server. Tools for a Foundry VTT world via our own FGA relay."""
+"""Foundry MCP server. Tools for a Foundry VTT world via the Foundry VTT MCP & Rest Relay."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ _client: RelayClient | None = None
 
 
 def make_client() -> RelayClient:
-    """Always our own FGA relay."""
+    """Always the Foundry VTT MCP & Rest Relay."""
     return FgaClient()
 
 
@@ -404,7 +404,7 @@ async def foundry_move_token(
 def _needs_fga() -> str | None:
     if isinstance(client(), FgaClient):
         return None
-    return "Error: this needs our own FGA relay. Use an fgat_ token. Nothing was changed."
+    return "Error: this needs the Foundry VTT MCP & Rest Relay. Use an fgat_ token. Nothing was changed."
 
 
 async def foundry_start_combat(
@@ -415,7 +415,7 @@ async def foundry_start_combat(
     start: bool = True,
     scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
 ) -> str:
-    """Make a combat on the scene (or reuse the one there), add tokens, roll initiative and start it. Needs the FGA relay."""
+    """Make a combat on the scene (or reuse the one there), add tokens, roll initiative and start it. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _write(
@@ -434,7 +434,7 @@ async def foundry_combat_turn(
     combat_id: Annotated[str, Field(description="Defaults to the active combat.")] = "",
     confirm: Annotated[bool, Field(description="Must be true for end. Ending removes the combat.")] = False,
 ) -> str:
-    """Run the combat: start it, move the turn or round, roll initiative, or end it. Needs the FGA relay."""
+    """Run the combat: start it, move the turn or round, roll initiative, or end it. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if action == "end" and not confirm:
@@ -451,7 +451,7 @@ async def foundry_apply_damage(
     multiplier: Annotated[float | None, Field(description="0.5 for half damage, 2 for double.")] = None,
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Change hit points the way D&D 5e does, with temporary hit points and resistances. Needs the FGA relay."""
+    """Change hit points the way D&D 5e does, with temporary hit points and resistances. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if bool(uuid) == bool(name):
@@ -471,7 +471,7 @@ async def foundry_rest(
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
     hit_dice: Annotated[int, Field(ge=0, le=20, description="Short rest only: how many hit dice to spend. Stops at full hit points.")] = 0,
 ) -> str:
-    """D&D 5e: make an actor take a long or short rest, with the system's own rules. A short rest can spend hit dice. Needs the FGA relay."""
+    """D&D 5e: make an actor take a long or short rest, with the system's own rules. A short rest can spend hit dice. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if bool(uuid) == bool(name):
@@ -485,7 +485,7 @@ async def foundry_get_conditions(
     name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Conditions on an actor or token, like prone or poisoned. Needs the FGA relay."""
+    """Conditions on an actor or token, like prone or poisoned. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/conditions", uuid=uuid, name=name, sceneId=scene_id)
@@ -497,7 +497,7 @@ async def foundry_get_resources(
     name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Spell slots, items with limited uses, and consumable counts (like arrows). Needs the FGA relay."""
+    """Spell slots, items with limited uses, and consumable counts (like arrows). Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/resources", uuid=uuid, name=name, sceneId=scene_id)
@@ -509,7 +509,7 @@ async def foundry_last_attack(
     limit: Annotated[int, Field(ge=10, le=200, description="How many recent chat messages to look through.")] = 60,
 ) -> str:
     """The latest attack in chat in one answer: attacker, weapon, roll, hit or miss, target, armor class and the damage roll.
-    If pending is true, the attack hit but the damage has not been rolled yet, so ask again in a few seconds. Needs the FGA relay."""
+    If pending is true, the attack hit but the damage has not been rolled yet, so ask again in a few seconds. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/last-attack", alias=alias, limit=limit)
@@ -520,7 +520,7 @@ async def foundry_list_packs(
     type: Annotated[str, Field(description="Actor, Item, JournalEntry, RollTable, Scene and so on. Empty for all.")] = "",
     q: Annotated[str, Field(description="Part of the compendium name.")] = "",
 ) -> str:
-    """Compendiums (packs) in the world. Needs the FGA relay."""
+    """Compendiums (packs) in the world. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/packs", type=type, q=q)
@@ -532,7 +532,7 @@ async def foundry_search_pack(
     q: Annotated[str, Field(description="Part of the name.")] = "",
     limit: Annotated[int, Field(ge=1, le=200)] = 25,
 ) -> str:
-    """Find entries in one compendium. Each result has an id for foundry_import_from_pack. Needs the FGA relay."""
+    """Find entries in one compendium. Each result has an id for foundry_import_from_pack. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/pack-index", pack=pack, q=q, limit=limit)
@@ -544,7 +544,7 @@ async def foundry_activity_log(
     token: Annotated[str, Field(description="Only this API token's name.")] = "",
     kind: Annotated[str, Field(description='Only this kind, like "sendChat" or "applyDamage".')] = "",
 ) -> str:
-    """What each API token changed lately, newest first. Needs the FGA relay."""
+    """What each API token changed lately, newest first. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/activity", limit=limit, token=token, kind=kind)
@@ -564,7 +564,7 @@ async def foundry_condition(
     name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Add, remove or toggle a condition on an actor or token. Needs the FGA relay."""
+    """Add, remove or toggle a condition on an actor or token. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if (bad := _one_of(uuid, name)) is not None:
@@ -577,7 +577,7 @@ async def foundry_death_save(
     name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Roll a death saving throw with D&D 5e rules. Posts to chat and updates the successes and failures. Needs the FGA relay."""
+    """Roll a death saving throw with D&D 5e rules. Posts to chat and updates the successes and failures. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if (bad := _one_of(uuid, name)) is not None:
@@ -595,7 +595,7 @@ async def foundry_check(
     advantage: bool = False,
     disadvantage: bool = False,
 ) -> str:
-    """Roll a saving throw, ability check or skill check with the actor's real bonuses. Posts to chat. Needs the FGA relay."""
+    """Roll a saving throw, ability check or skill check with the actor's real bonuses. Posts to chat. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if (bad := _one_of(uuid, name)) is not None:
@@ -615,7 +615,7 @@ async def foundry_spend_resource(
     name: Annotated[str, Field(description="For slots: token name on the scene.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
 ) -> str:
-    """Spend, restore or set a spell slot, an item's charges, or an item's quantity. Refuses to go below zero. Needs the FGA relay."""
+    """Spend, restore or set a spell slot, an item's charges, or an item's quantity. Refuses to go below zero. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if target == "slot" and (bad := _one_of(uuid, name)) is not None:
@@ -630,7 +630,7 @@ async def foundry_target(
     uuids: Annotated[list[str] | None, Field(description="Token uuids to target.")] = None,
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with names.")] = "",
 ) -> str:
-    """Set the GM's targets on the canvas. Give nothing to clear all targets. Needs the FGA relay."""
+    """Set the GM's targets on the canvas. Give nothing to clear all targets. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _write("POST", "/target", body={"names": names, "uuids": uuids, "sceneId": scene_id})
@@ -644,7 +644,7 @@ async def foundry_add_token(
     hidden: bool = False,
     token_name: Annotated[str, Field(description="Give the token a different name.")] = "",
 ) -> str:
-    """Put an actor on a scene as a token. Needs the FGA relay. To remove a token, use foundry_delete."""
+    """Put an actor on a scene as a token. Needs the Rest Relay. To remove a token, use foundry_delete."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _write("POST", "/tokens/create", body={
@@ -661,7 +661,7 @@ async def foundry_set_token(
     x: float | None = None,
     y: float | None = None,
 ) -> str:
-    """Show or hide a token, or change its rotation, elevation or position. Needs the FGA relay."""
+    """Show or hide a token, or change its rotation, elevation or position. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if (bad := _one_of(uuid, name)) is not None:
@@ -678,7 +678,7 @@ async def foundry_create_journal(
     folder: Annotated[str, Field(description="Folder id.")] = "",
     uuid: Annotated[str, Field(description="Add pages to this existing journal instead of making a new one.")] = "",
 ) -> str:
-    """Make a journal entry with text pages, or add pages to one. Needs the FGA relay."""
+    """Make a journal entry with text pages, or add pages to one. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _write("POST", "/journals", body={"uuid": uuid, "name": name, "content": content, "pages": pages, "folder": folder})
@@ -689,7 +689,7 @@ async def foundry_roll_table(
     uuid: Annotated[str, Field(description="Table uuid, if you have it.")] = "",
     post_to_chat: bool = True,
 ) -> str:
-    """Roll on a rollable table. Needs the FGA relay."""
+    """Roll on a rollable table. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if not (uuid or name):
@@ -708,7 +708,7 @@ async def foundry_import_from_pack(
     y: float | None = None,
     hidden: bool = False,
 ) -> str:
-    """Copy a compendium entry into the world, like a monster. Can place its token. Needs the FGA relay."""
+    """Copy a compendium entry into the world, like a monster. Can place its token. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     return await _write("POST", "/compendium/import", body={

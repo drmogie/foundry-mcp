@@ -154,3 +154,10 @@
 - Relay web page: Recent changes list with a token filter (GET /api/activity, login needed).
 - Not yet tried live. Test on MCP Test first.
 - Tests: 62 relay, 64 module, 87 mcp-server.
+
+## 2026-09-29: relay moved out (mcp-server .7, module .8)
+
+- The relay add-on moved to drmogie/ha-foundry-vtt-addon (folder foundry_mcp_rest_relay) and was renamed Foundry VTT MCP & Rest Relay (add-on version 2026.09.29.9). relay-py, its build workflow and repository.yaml were removed here.
+- New add-on ID, so data does not carry over: new login, connect key and tokens. The module needs the new connect key. The MCP config needs a new token.
+- Module keeps the name FGA Relay Connect and the id fga-relay-connect (renaming the id would break installs). Only its status text changed.
+- Old plan doc in the Claude project still mentions relay-py paths.

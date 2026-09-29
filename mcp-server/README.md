@@ -1,9 +1,9 @@
 # Foundry MCP server
 
-Version: 2026.09.29.6
+Version: 2026.09.29.7
 
 Lets Claude read a Foundry VTT world.
-It talks to our own FGA relay add-on.
+It talks to the Foundry VTT MCP & Rest Relay add-on.
 By default it is read-only. Nothing changes your world.
 Write tools exist, but they are off until you turn them on. See "Write tools" below.
 
@@ -35,7 +35,7 @@ Write tools exist, but they are off until you turn them on. See "Write tools" be
 
 Set these as environment variables.
 
-- FOUNDRY_API_KEY (required): a token from the FGA relay page. It starts with `fgat_`.
+- FOUNDRY_API_KEY (required): a token from the relay page. It starts with `fgat_`.
 - FOUNDRY_RELAY_URL: the relay address. Default is `https://rest-relay.mogie.io` (home network only).
 - FOUNDRY_CLIENT_ID: which world to use. Leave it empty when only one world is online.
 
@@ -45,7 +45,7 @@ Tip: make a scoped key on the relay dashboard with read scopes only.
 
 ## The relay
 
-This server only talks to our own FGA relay. ThreeHats is gone.
+This server only talks to the Foundry VTT MCP & Rest Relay (add-on repository: https://github.com/drmogie/ha-foundry-vtt-addon). ThreeHats is gone.
 
 - Make a token on the relay web page. It starts with `fgat_`.
 - Set FOUNDRY_API_KEY to that token.
@@ -153,4 +153,4 @@ The tests use a pretend relay. They do not need Foundry.
 
 - Combat tools: start and end an encounter, next turn.
 - A tool to run your mod checks.
-- Run it as a Home Assistant add-on.
+- The relay itself runs as a Home Assistant add-on. It lives in the ha-foundry-vtt-addon repository.

@@ -1,8 +1,8 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.7
+Version: 2026.09.29.8
 
-Foundry module that links one browser to your own FGA Relay.
+Foundry module that links one browser to your Foundry VTT MCP & Rest Relay (add-on in https://github.com/drmogie/ha-foundry-vtt-addon).
 
 ## Use
 - Copy the `fga-relay-connect` folder into Foundry `Data/modules`.
@@ -24,6 +24,9 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.8
+- Wording: the relay is now called Foundry VTT MCP & Rest Relay. The module keeps its name and id.
+
 ### 2026.09.29.7
 - Conditions: list, add, remove, toggle.
 - Death saves, saving throws, ability checks and skill checks, with advantage and an optional DC.
