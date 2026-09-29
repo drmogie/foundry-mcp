@@ -1,6 +1,6 @@
 # Foundry MCP - project notes
 
-## 2026-09-28: first publish (2026.09.28.01)
+## 2026-09-28: first publish (2026.09.28.02)
 
 - Goal: let Claude work with a Foundry VTT test world through the ThreeHats
   Foundry REST API and its relay.
