@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.28.06
+- Install docs now use a zip link, so Git is not needed on the computer.
+
 ## 2026.09.28.05
 - Fix: the MCP server failed to start on a fresh install.
 - A new MCP library (2.x) renamed a part we use. We now pin `mcp<2`.

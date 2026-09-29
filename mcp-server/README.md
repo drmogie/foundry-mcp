@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.28.05
+Version: 2026.09.28.06
 
 Lets Claude read a Foundry VTT world.
 It talks to the ThreeHats relay add-on.
@@ -39,7 +39,7 @@ Tip: make a scoped key on the relay dashboard with read scopes only.
 claude mcp add foundry \
   --env FOUNDRY_API_KEY=YOUR_KEY \
   --env FOUNDRY_RELAY_URL=http://ha-pi4:3010 \
-  -- uvx --from "git+https://github.com/drmogie/foundry-mcp#subdirectory=mcp-server" foundry-mcp
+  -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server" foundry-mcp
 ```
 
 ## Add it to Claude Desktop
@@ -49,7 +49,7 @@ Open the config file and add this under `mcpServers`:
 ```json
 "foundry": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/drmogie/foundry-mcp#subdirectory=mcp-server", "foundry-mcp"],
+  "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server", "foundry-mcp"],
   "env": {
     "FOUNDRY_API_KEY": "YOUR_KEY",
     "FOUNDRY_RELAY_URL": "http://ha-pi4:3010"
@@ -58,6 +58,7 @@ Open the config file and add this under `mcpServers`:
 ```
 
 This needs `uv` installed on the computer.
+It does not need Git. The link downloads a zip file.
 
 ## Run the tests
 

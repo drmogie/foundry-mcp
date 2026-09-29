@@ -36,3 +36,8 @@
 - A fresh `uvx` or `pip` install pulled mcp 2.x, which renamed FastMCP to MCPServer. The server crashed on start (Claude showed 'server disconnected').
 - Fix: pin `mcp>=1.2,<2` in pyproject. Tested on mcp 1.27.
 - Lesson: test the real install path (`uvx --from git+...`), not only the source tree.
+
+## 2026-09-28: no-Git install (2026.09.28.06)
+
+- Claude Desktop log showed `Git executable not found` on the user's Windows PC.
+- `uvx --from https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server` works without Git. Tested with a stripped PATH.
