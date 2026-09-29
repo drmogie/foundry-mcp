@@ -52,7 +52,7 @@ The same tools work with our own relay. Nothing else changes.
 
 ## Write tools (optional, off by default)
 
-Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eleven tools appear:
+Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twelve tools appear:
 
 - foundry_send_chat: post a chat message
 - foundry_roll: roll dice
@@ -64,6 +64,7 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eleven tools appear:
 - foundry_move_token: move a token
 - foundry_start_combat: make a combat, add tokens, roll initiative, start (our own relay only)
 - foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true` (our own relay only)
+- foundry_rest: long or short rest with D&D 5e rules (our own relay only)
 - foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules (our own relay only)
 
 Safety rules:

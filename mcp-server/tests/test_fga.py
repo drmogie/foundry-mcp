@@ -375,3 +375,17 @@ async def test_stage_4_tools_explain_when_not_on_our_relay(monkeypatch):
         await server.foundry_activity_log(),
     ):
         assert "FGA relay" in out and "fgat_" in out
+
+
+async def test_rest_by_uuid_and_by_name(relay):
+    await server.foundry_rest(uuid="Actor.a1")
+    m, path, _q, body = last(relay)
+    assert (m, path, body) == ("POST", "/api/v1/rest", {"uuid": "Actor.a1", "type": "long"})
+    await server.foundry_rest(rest_type="short", name="Foreman")
+    assert last(relay)[3] == {"uuid": "Scene.s1.Token.t2", "type": "short"}
+    assert "exactly one" in await server.foundry_rest()
+
+
+async def test_rest_explains_when_not_on_our_relay(monkeypatch):
+    monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key="k"))
+    assert "FGA relay" in await server.foundry_rest(uuid="Actor.a1")

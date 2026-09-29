@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.09.29.6
+- New route POST /api/v1/rest. Long or short rest for an actor or token. Uses the D&D 5e rules.
+- Needs FGA Relay Connect 2026.09.29.5 in Foundry.
+- Tests: 58 relay tests.
+
 ## 2026.09.29.5
 - Combat: make a combat, add tokens, roll initiative, start, next or previous turn and round, end.
 - Apply damage, healing or temporary hit points. Uses the D&D 5e rules.

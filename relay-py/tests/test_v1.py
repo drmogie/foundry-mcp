@@ -404,3 +404,18 @@ async def test_activity_needs_a_token_and_logs_blocked_writes(locked_relay):
         rows = (await api.get("/api/v1/activity")).json()["data"]
         assert rows[0]["ok"] is False and "not allowed" in rows[0]["error"]
     await anon.aclose(); await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_rest_route(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    ro = (await web.post("/api/tokens", json={"name": "r", "scope": "read"})).json()["token"]
+    reader = httpx.AsyncClient(base_url=f"http://{relay}", headers={"x-api-key": ro})
+    async with Foundry(relay, key) as f:
+        assert (await api.post("/api/v1/rest", json={"uuid": "Actor.a1"})).status_code == 200
+        assert (await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "short"})).status_code == 200
+        r = await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "nap"})
+        assert r.status_code == 400 and "long" in r.json()["detail"]
+        assert (await reader.post("/api/v1/rest", json={"uuid": "Actor.a1"})).status_code == 403
+        assert f.seen == [("rest", {"uuid": "Actor.a1", "type": "long"}), ("rest", {"uuid": "Actor.a1", "type": "short"})]
+    await reader.aclose(); await api.aclose(); await web.aclose()

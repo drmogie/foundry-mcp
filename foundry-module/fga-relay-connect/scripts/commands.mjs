@@ -368,6 +368,22 @@ export function makeCommands(ctx) {
       return { actor: brief(actor), mode: how, amount: n, before, after: hpOf(actor) };
     },
 
+    async rest({ uuid, type } = {}) {
+      need(uuid, "uuid");
+      const kind = type ?? "long";
+      if (!["long", "short"].includes(kind)) throw new Error(`Unknown rest type ${kind}. Use long or short.`);
+      const doc = await find(uuid);
+      const actor = doc.documentName === "Actor" ? doc : doc.actor;
+      if (!actor) throw new Error(`${uuid} is not an actor or a token with an actor.`);
+      const method = kind === "long" ? "longRest" : "shortRest";
+      if (typeof actor[method] !== "function") throw new Error(`${actor.name} cannot take a ${kind} rest. This needs the D&D 5e system.`);
+      const before = hpOf(actor);
+      // dialog:false rests straight away. The system posts its own rest message to chat.
+      const result = await actor[method]({ dialog: false, chat: true, ...(kind === "long" ? { newDay: true } : {}) });
+      if (result === false || result === null) throw new Error(`${actor.name} could not rest. Foundry or the system stopped it.`);
+      return { actor: brief(actor), type: kind, before, after: hpOf(actor) };
+    },
+
     async listFiles({ path, source } = {}) {
       const where = source ?? "data";
       if (!FILE_SOURCES.includes(where)) throw new Error(`Cannot browse ${where}. Try one of: ${FILE_SOURCES.join(", ")}.`);

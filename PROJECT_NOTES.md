@@ -122,3 +122,11 @@
 - Not yet run against real Foundry. Try in MCP Test: make a combat, next turn, apply damage to Bob, read the log.
 - Next: live test, then maybe show the activity log on the relay web page.
 - Live check on ha-pi4 (relay .5, module .4, MCP Test): combat made with Bob and Foreman, initiative rolled, next turn worked, 5 fire damage then 5 healing on Bob (87 to 82 to 87), combat ended, activity log showed all five writes under the ClaudeDesktop token.
+
+## 2026-09-29: fun fight and rest (relay .6, module .5, mcp-server 2026.09.29.3)
+
+- Fun test: Bob (shortbow) vs Foreman (longsword) in MCP Test until someone was bloodied. Bob fell to 39 after 8 rounds. Foreman ended at 65.
+- Findings: use_item on this world posts the attack card, then the FGA Auto Damage module rolls the attack and damage after a few seconds. It did not change hit points in most cases, so the hit was applied with foundry_apply_damage from the chat roll.
+- Reading current hit points: foundry_apply_damage with amount 0 shows before and after without changing anything (it does add a log line).
+- The Foundry link stalled a few times. A call that times out may still have run. Check state before repeating (combat turn, hit points).
+- New: rest command (module), POST /api/v1/rest (relay), foundry_rest tool.

@@ -1,6 +1,6 @@
 # FGA Relay
 
-Version: 2026.09.29.5
+Version: 2026.09.29.6
 
 Our own relay between Foundry VTT and tools like Claude.
 It is the REST API. The MCP server sits on top of it.
@@ -44,6 +44,7 @@ Write routes (write token, allowed worlds only):
 - POST /api/v1/combat makes a combat on the scene, or reuses the one there. Optional `tokenUuids`, `rollInitiative`, `start`.
 - POST /api/v1/combat/control with `action`: start, nextTurn, previousTurn, nextRound, previousRound, rollAll, rollNpc or end. End needs `confirm: true`.
 - POST /api/v1/damage with `uuid` (actor or token), `amount`, and optional `mode` (damage, heal or temp), `type` and `multiplier`. Uses the D&D 5e rules for resistance and temporary hit points.
+- POST /api/v1/rest with `uuid` (actor or token) and `type` (long or short). Runs the D&D 5e rest, with no dialog.
 
 Read route for the log (any token):
 - GET /api/v1/activity?limit=50 lists the latest writes, newest first. Filter with `token` (a token name) or `kind`. It shows who, what, when, and any error. Reads are not logged. The log keeps the last 1000 entries in /data/activity.db.

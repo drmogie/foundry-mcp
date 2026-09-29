@@ -15,6 +15,7 @@ from .tokens import Token
 
 COMBAT_ACTIONS = ("start", "nextTurn", "previousTurn", "nextRound", "previousRound", "rollAll", "rollNpc", "end")
 DAMAGE_MODES = ("damage", "heal", "temp")
+REST_TYPES = ("long", "short")
 
 
 class UpdateBody(BaseModel):
@@ -75,6 +76,11 @@ class DamageBody(BaseModel):
     mode: str = "damage"
     type: str | None = None
     multiplier: float | None = None
+
+
+class RestBody(BaseModel):
+    uuid: str
+    type: str = "long"
 
 
 class SceneSwitchBody(BaseModel):
@@ -245,3 +251,10 @@ def register_v1(
         if body.amount < 0:
             raise HTTPException(status_code=400, detail="Amount cannot be negative. Use mode heal to add hit points.")
         return await run(request, "applyDamage", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/rest")
+    async def rest(body: RestBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if body.type not in REST_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unknown rest type {body.type}. Use one of: {', '.join(REST_TYPES)}.")
+        return await run(request, "rest", body.model_dump(), write=True, client_id=client_id)

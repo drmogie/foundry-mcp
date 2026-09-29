@@ -450,3 +450,38 @@ test("applyDamage works from a token and complains clearly", async () => {
   await assert.rejects(c.applyDamage({ uuid: "Actor.a2", amount: 1 }), /no hit points/);
   await assert.rejects(c.applyDamage({ uuid: "Scene.s1", amount: 1 }), /not an actor/);
 });
+
+// ----- rest -----
+
+test("rest runs a long rest and reports hit points before and after", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 20, temp: 0, max: 40 });
+  const seen = [];
+  bob.longRest = async (opts) => { seen.push(opts); bob.system.attributes.hp.value = 40; return { rested: true }; };
+  const r = await c.rest({ uuid: "Actor.a1" });
+  assert.deepEqual(seen, [{ dialog: false, chat: true, newDay: true }]);
+  assert.equal(r.type, "long");
+  assert.equal(r.before.value, 20);
+  assert.equal(r.after.value, 40);
+});
+
+test("rest can be short, works from a token, and explains problems", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 20, temp: 0, max: 40 });
+  const seen = [];
+  bob.shortRest = async (opts) => { seen.push(opts); return {}; };
+  w.makeDoc("Token", "t1", { name: "Bob", extra: { actor: bob } });
+  const r = await c.rest({ uuid: "Token.t1", type: "short" });
+  assert.deepEqual(seen, [{ dialog: false, chat: true }]);
+  assert.equal(r.type, "short");
+  await assert.rejects(c.rest({ uuid: "Actor.a1", type: "nap" }), /Unknown rest type/);
+  await assert.rejects(c.rest({}), /uuid is required/);
+  await assert.rejects(c.rest({ uuid: "Scene.s1" }), /not an actor/);
+  const foreman = w.docs.get("Actor.a2");
+  withHp(foreman, { value: 5, temp: 0, max: 9 });
+  await assert.rejects(c.rest({ uuid: "Actor.a2" }), /cannot take a long rest/);
+  bob.longRest = async () => false;
+  await assert.rejects(c.rest({ uuid: "Actor.a1" }), /could not rest/);
+});

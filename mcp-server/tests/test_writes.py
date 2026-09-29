@@ -53,6 +53,7 @@ async def test_write_tools_register_only_when_asked():
         "foundry_start_combat",
         "foundry_combat_turn",
         "foundry_apply_damage",
+        "foundry_rest",
     }
 
 

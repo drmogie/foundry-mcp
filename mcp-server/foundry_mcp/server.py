@@ -468,6 +468,20 @@ async def foundry_apply_damage(
     )
 
 
+async def foundry_rest(
+    rest_type: Annotated[str, Field(description="long or short.")] = "long",
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """D&D 5e: make an actor take a long or short rest, with the system's own rules. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if bool(uuid) == bool(name):
+        return "Error: give exactly one of uuid or name."
+    return await _write("POST", "/rest", body={"uuid": uuid, "name": name, "type": rest_type, "sceneId": scene_id})
+
+
 @mcp.tool()
 async def foundry_activity_log(
     limit: Annotated[int, Field(ge=1, le=500)] = 20,
@@ -492,6 +506,7 @@ WRITE_TOOLS = (
     foundry_start_combat,
     foundry_combat_turn,
     foundry_apply_damage,
+    foundry_rest,
 )
 
 
