@@ -100,6 +100,43 @@ export function makeCommands(ctx) {
     return combat;
   }
 
+  // Spend hit dice like a player would: biggest die first, roll it, add Con, heal. Stops at full hit points.
+  const spendHitDice = async (actor, count) => {
+    const conMod = actor.system?.abilities?.con?.mod ?? 0;
+    const classes = [...(actor.items ?? [])]
+      .filter((i) => i.type === "class")
+      .map((item) => {
+        const newStyle = item.system?.hd !== undefined && item.system.hd !== null;
+        return {
+          item,
+          denom: newStyle ? item.system.hd.denomination : item.system?.hitDice,
+          spent: newStyle ? (item.system.hd.spent ?? 0) : (item.system?.hitDiceUsed ?? 0),
+          levels: item.system?.levels ?? 0,
+          path: newStyle ? "system.hd.spent" : "system.hitDiceUsed"
+        };
+      })
+      .filter((c) => /^d\d+$/.test(String(c.denom ?? "")))
+      .sort((a, b) => Number(b.denom.slice(1)) - Number(a.denom.slice(1)));
+    if (!classes.length) throw new Error(`${actor.name} has no class with hit dice.`);
+    const rolls = [];
+    for (let n = 0; n < count; n++) {
+      const now = hpOf(actor);
+      if (now.max && now.value >= now.max) break;
+      const pick = classes.find((c) => c.spent < c.levels);
+      if (!pick) break;
+      const roll = new ctx.Roll(`1${pick.denom} + ${conMod}`);
+      await roll.evaluate();
+      if (ctx.ChatMessage?.getSpeaker) await roll.toMessage({ speaker: ctx.ChatMessage.getSpeaker({ actor }) }, { flavor: `${actor.name} spends a ${pick.denom} Hit Die` });
+      const gain = Math.max(0, roll.total);
+      await actor.update({ "system.attributes.hp.value": Math.min(now.max || Infinity, now.value + gain) });
+      pick.spent += 1;
+      await pick.item.update({ [pick.path]: pick.spent });
+      rolls.push({ die: pick.denom, total: roll.total, healed: Math.min(gain, (now.max || Infinity) - now.value) });
+    }
+    const left = classes.reduce((sum, c) => sum + Math.max(0, c.levels - c.spent), 0);
+    return { requested: count, spent: rolls.length, rolls, remaining: left };
+  };
+
   const hpOf = (actor) => {
     const hp = actor.system?.attributes?.hp;
     if (!hp) throw new Error(`${actor.name} has no hit points to change.`);
@@ -368,9 +405,12 @@ export function makeCommands(ctx) {
       return { actor: brief(actor), mode: how, amount: n, before, after: hpOf(actor) };
     },
 
-    async rest({ uuid, type } = {}) {
+    async rest({ uuid, type, hitDice } = {}) {
       need(uuid, "uuid");
       const kind = type ?? "long";
+      const dice = hitDice === undefined || hitDice === null ? 0 : Number(hitDice);
+      if (!Number.isInteger(dice) || dice < 0 || dice > 20) throw new Error("hitDice must be a whole number from 0 to 20.");
+      if (dice > 0 && kind !== "short") throw new Error("Hit dice are only spent on a short rest.");
       if (!["long", "short"].includes(kind)) throw new Error(`Unknown rest type ${kind}. Use long or short.`);
       const doc = await find(uuid);
       const actor = doc.documentName === "Actor" ? doc : doc.actor;
@@ -381,7 +421,12 @@ export function makeCommands(ctx) {
       // dialog:false rests straight away. The system posts its own rest message to chat.
       const result = await actor[method]({ dialog: false, chat: true, ...(kind === "long" ? { newDay: true } : {}) });
       if (result === false || result === null) throw new Error(`${actor.name} could not rest. Foundry or the system stopped it.`);
-      return { actor: brief(actor), type: kind, before, after: hpOf(actor) };
+      const out = { actor: brief(actor), type: kind, before, after: hpOf(actor) };
+      if (dice > 0) {
+        out.hitDice = await spendHitDice(actor, dice);
+        out.after = hpOf(actor);
+      }
+      return out;
     },
 
     async listFiles({ path, source } = {}) {

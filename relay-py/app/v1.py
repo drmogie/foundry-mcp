@@ -81,6 +81,7 @@ class DamageBody(BaseModel):
 class RestBody(BaseModel):
     uuid: str
     type: str = "long"
+    hitDice: int | None = None
 
 
 class SceneSwitchBody(BaseModel):
@@ -257,4 +258,9 @@ def register_v1(
         api_token(request, "write")
         if body.type not in REST_TYPES:
             raise HTTPException(status_code=400, detail=f"Unknown rest type {body.type}. Use one of: {', '.join(REST_TYPES)}.")
-        return await run(request, "rest", body.model_dump(), write=True, client_id=client_id)
+        if body.hitDice is not None:
+            if not 0 <= body.hitDice <= 20:
+                raise HTTPException(status_code=400, detail="hitDice must be a whole number from 0 to 20.")
+            if body.hitDice > 0 and body.type != "short":
+                raise HTTPException(status_code=400, detail="Hit dice are only spent on a short rest.")
+        return await run(request, "rest", body.model_dump(exclude_none=True), write=True, client_id=client_id)

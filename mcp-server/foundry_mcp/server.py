@@ -469,13 +469,14 @@ async def foundry_rest(
     uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
     name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
     scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+    hit_dice: Annotated[int, Field(ge=0, le=20, description="Short rest only: how many hit dice to spend. Stops at full hit points.")] = 0,
 ) -> str:
-    """D&D 5e: make an actor take a long or short rest, with the system's own rules. Needs the FGA relay."""
+    """D&D 5e: make an actor take a long or short rest, with the system's own rules. A short rest can spend hit dice. Needs the FGA relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if bool(uuid) == bool(name):
         return "Error: give exactly one of uuid or name."
-    return await _write("POST", "/rest", body={"uuid": uuid, "name": name, "type": rest_type, "sceneId": scene_id})
+    return await _write("POST", "/rest", body={"uuid": uuid, "name": name, "type": rest_type, "sceneId": scene_id, "hitDice": hit_dice})
 
 
 @mcp.tool()

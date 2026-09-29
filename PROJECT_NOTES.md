@@ -137,3 +137,9 @@
 - MCP server: always uses FgaClient. The old RelayClient class stays as the shared base only.
 - Still to do by hand: turn off or remove the ThreeHats module in the MCP Test world; remove any DNS record or Cloudflare name for relay.mogie.io; delete the two ghcr.io packages (aarch64-addon-foundry-relay and amd64-addon-foundry-relay) if wanted.
 - ha-blue was not touched.
+
+## 2026-09-29: hit dice on short rests (relay .7, module .6, mcp-server .5)
+
+- foundry_rest has hit_dice. It runs the short rest, then spends that many dice: biggest die first, rolls with Con, heals, adds one to the class's used dice, stops at full hit points.
+- Works with both dnd5e class fields (hd.denomination and hd.spent, or the older hitDice and hitDiceUsed).
+- Monsters have no class, so they get a plain message.

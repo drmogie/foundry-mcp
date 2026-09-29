@@ -485,3 +485,68 @@ test("rest can be short, works from a token, and explains problems", async () =>
   bob.longRest = async () => false;
   await assert.rejects(c.rest({ uuid: "Actor.a1" }), /could not rest/);
 });
+
+// ----- rest with hit dice -----
+
+function withClass(actor, { denom = "d8", levels = 3, spent = 0, old = false } = {}) {
+  actor.system.abilities = { con: { mod: 2 } };
+  const item = {
+    type: "class",
+    system: old ? { levels, hitDice: denom, hitDiceUsed: spent } : { levels, hd: { denomination: denom, spent } },
+    async update(data) {
+      const [key, value] = Object.entries(data)[0];
+      if (key === "system.hd.spent") item.system.hd.spent = value;
+      else if (key === "system.hitDiceUsed") item.system.hitDiceUsed = value;
+      else throw new Error(`unexpected update ${key}`);
+    }
+  };
+  actor.items = [item];
+  return item;
+}
+
+test("short rest can spend hit dice, heal, and stop at full hit points", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 20, temp: 0, max: 40 });
+  bob.shortRest = async () => ({});
+  const item = withClass(bob);
+  // the fake roll is always 12 (before Con), so each die heals 12
+  bob.update = async (data) => { bob.system.attributes.hp.value = data["system.attributes.hp.value"]; };
+  const r = await c.rest({ uuid: "Actor.a1", type: "short", hitDice: 3 });
+  assert.equal(r.hitDice.requested, 3);
+  assert.equal(r.hitDice.spent, 2);
+  assert.equal(r.hitDice.rolls[0].die, "d8");
+  assert.equal(r.hitDice.rolls[1].healed, 8);
+  assert.equal(r.hitDice.remaining, 1);
+  assert.equal(item.system.hd.spent, 2);
+  assert.equal(r.after.value, 40);
+});
+
+test("hit dice: older item fields work, the biggest die goes first, and used up dice stop it", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 1, temp: 0, max: 100 });
+  bob.shortRest = async () => ({});
+  bob.update = async (data) => { bob.system.attributes.hp.value = data["system.attributes.hp.value"]; };
+  const small = withClass(bob, { denom: "d8", levels: 1, spent: 0, old: true });
+  const big = withClass(bob, { denom: "d10", levels: 1, spent: 0 });
+  bob.items = [small, big];
+  const r = await c.rest({ uuid: "Actor.a1", type: "short", hitDice: 5 });
+  assert.deepEqual(r.hitDice.rolls.map((x) => x.die), ["d10", "d8"]);
+  assert.equal(r.hitDice.spent, 2);
+  assert.equal(r.hitDice.remaining, 0);
+  assert.equal(small.system.hitDiceUsed, 1);
+});
+
+test("hit dice: only on a short rest, sane numbers, and needs a class", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 20, temp: 0, max: 40 });
+  bob.shortRest = async () => ({});
+  bob.longRest = async () => ({});
+  await assert.rejects(c.rest({ uuid: "Actor.a1", type: "long", hitDice: 1 }), /only spent on a short rest/);
+  await assert.rejects(c.rest({ uuid: "Actor.a1", type: "short", hitDice: -1 }), /whole number/);
+  await assert.rejects(c.rest({ uuid: "Actor.a1", type: "short", hitDice: 99 }), /whole number/);
+  bob.items = [];
+  await assert.rejects(c.rest({ uuid: "Actor.a1", type: "short", hitDice: 1 }), /no class with hit dice/);
+});

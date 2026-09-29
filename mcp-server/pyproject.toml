@@ -1,6 +1,6 @@
 [project]
 name = "foundry-mcp"
-version = "2026.9.29.4"
+version = "2026.9.29.5"
 description = "MCP server that lets Claude read a Foundry VTT world through our own FGA relay."
 readme = "README.md"
 requires-python = ">=3.10"

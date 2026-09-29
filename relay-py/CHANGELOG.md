@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.7
+- Short rest can spend hit dice: send `hitDice` to POST /api/v1/rest.
+- Needs FGA Relay Connect 2026.09.29.6 in Foundry.
+
 ## 2026.09.29.6
 - New route POST /api/v1/rest. Long or short rest for an actor or token. Uses the D&D 5e rules.
 - Needs FGA Relay Connect 2026.09.29.5 in Foundry.

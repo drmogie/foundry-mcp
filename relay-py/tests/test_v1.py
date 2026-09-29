@@ -417,5 +417,12 @@ async def test_rest_route(relay):
         r = await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "nap"})
         assert r.status_code == 400 and "long" in r.json()["detail"]
         assert (await reader.post("/api/v1/rest", json={"uuid": "Actor.a1"})).status_code == 403
-        assert f.seen == [("rest", {"uuid": "Actor.a1", "type": "long"}), ("rest", {"uuid": "Actor.a1", "type": "short"})]
+        assert (await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "short", "hitDice": 2})).status_code == 200
+        assert (await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "long", "hitDice": 1})).status_code == 400
+        assert (await api.post("/api/v1/rest", json={"uuid": "Actor.a1", "type": "short", "hitDice": 50})).status_code == 400
+        assert f.seen == [
+            ("rest", {"uuid": "Actor.a1", "type": "long"}),
+            ("rest", {"uuid": "Actor.a1", "type": "short"}),
+            ("rest", {"uuid": "Actor.a1", "type": "short", "hitDice": 2}),
+        ]
     await reader.aclose(); await api.aclose(); await web.aclose()

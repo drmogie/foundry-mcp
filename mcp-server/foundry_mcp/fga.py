@@ -272,7 +272,7 @@ class FgaClient(RelayClient):
             return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": uuid, "x": b["x"], "y": b["y"]})
         if endpoint == "/rest":
             uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
-            return await self._fga("POST", "/api/v1/rest", body={"uuid": uuid, "type": b.get("type") or "long"})
+            return await self._fga("POST", "/api/v1/rest", body={"uuid": uuid, "type": b.get("type") or "long", "hitDice": b.get("hitDice") or None})
         if endpoint == "/combat/create":
             return await self._combat_create(b)
         if endpoint == "/combat/control":

@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.29.4
+Version: 2026.09.29.5
 
 Lets Claude read a Foundry VTT world.
 It talks to our own FGA relay add-on.
@@ -62,7 +62,7 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twelve tools appear:
 - foundry_move_token: move a token
 - foundry_start_combat: make a combat, add tokens, roll initiative, start
 - foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true`
-- foundry_rest: long or short rest with D&D 5e rules
+- foundry_rest: long or short rest with D&D 5e rules. A short rest can spend hit dice (`hit_dice`)
 - foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules
 
 Safety rules:

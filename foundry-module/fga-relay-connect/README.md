@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.5
+Version: 2026.09.29.6
 
 Foundry module that links one browser to your own FGA Relay.
 
@@ -24,6 +24,9 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.6
+- Short rest can spend hit dice. Biggest die first, adds Con, stops at full hit points, and tracks the used dice on the class.
+
 ### 2026.09.29.5
 - Long and short rests for an actor or token.
 - 49 tests with a pretend Foundry.

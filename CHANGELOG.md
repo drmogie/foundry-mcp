@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.29.5
+- Short rest can spend hit dice. Relay 2026.09.29.7, module 2026.09.29.6, mcp-server 2026.09.29.5. Update all three.
+
 ## 2026.09.29.4
 - Removed ThreeHats. The `foundry-relay` add-on folder and its build workflow are gone.
 - The MCP server now always uses our own FGA relay. `FOUNDRY_RELAY_KIND` no longer does anything.

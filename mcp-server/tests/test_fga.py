@@ -369,6 +369,8 @@ async def test_rest_by_uuid_and_by_name(relay):
     await server.foundry_rest(rest_type="short", name="Foreman")
     assert last(relay)[3] == {"uuid": "Scene.s1.Token.t2", "type": "short"}
     assert "exactly one" in await server.foundry_rest()
+    await server.foundry_rest(rest_type="short", uuid="Actor.a1", hit_dice=3)
+    assert last(relay)[3] == {"uuid": "Actor.a1", "type": "short", "hitDice": 3}
 
 
 async def test_rest_explains_when_not_on_our_relay(monkeypatch):
