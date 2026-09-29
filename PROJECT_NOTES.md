@@ -48,3 +48,10 @@
 - Reply has `fileData` as a data URL, plus `mimeType`.
 - `foundry_download_folder` walks one folder level at a time with `/file-system` (recursive reply shape is unverified), then downloads each file.
 - Not yet run against the live relay.
+
+## 2026-09-28: stale build folder (2026.09.28.08)
+
+- Symptom: installs from the repo zip reported 2026.09.28.05 and had 14 tools, even from the newest commit.
+- Cause: `mcp-server/build/lib/` (made by a local `pip install` in the source tree) was committed. setuptools reuses `build/lib` files when they look newer than the source, and files from a zip all share one timestamp.
+- Fix: `git rm` the folder, ignore `build/` and `dist/`.
+- Lesson: install into a copy or a venv, never `pip install` in the source tree, and check `git status` for build output before committing.

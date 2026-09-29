@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.28.08
+- Fix: an old `build/` folder was committed by mistake. Installs from a zip or Git picked up stale code (version .05) and had no new tools.
+- Removed `build/`, and ignore `build/` and `dist/` from now on.
+
 ## 2026.09.28.07
 - New tool: `foundry_read_file` (read a text file from Foundry).
 - New opt-in tool: `foundry_download_folder`. Only exists when `FOUNDRY_DOWNLOAD_DIR` is set. Writes only inside that folder.
