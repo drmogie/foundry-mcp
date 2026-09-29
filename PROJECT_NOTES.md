@@ -30,3 +30,9 @@
 - Reply shapes come from the relay source: `/clients` returns `clients[]` with `clientId` and `isOnline`.
 - Arrays go in the query as JSON text, for example `details`.
 - Write tools are not built yet. Test world only, one at a time.
+
+## 2026-09-28: install fix (2026.09.28.05)
+
+- A fresh `uvx` or `pip` install pulled mcp 2.x, which renamed FastMCP to MCPServer. The server crashed on start (Claude showed 'server disconnected').
+- Fix: pin `mcp>=1.2,<2` in pyproject. Tested on mcp 1.27.
+- Lesson: test the real install path (`uvx --from git+...`), not only the source tree.

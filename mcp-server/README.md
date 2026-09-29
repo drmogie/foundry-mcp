@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.28.04
+Version: 2026.09.28.05
 
 Lets Claude read a Foundry VTT world.
 It talks to the ThreeHats relay add-on.

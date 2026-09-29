@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.28.05
+- Fix: the MCP server failed to start on a fresh install.
+- A new MCP library (2.x) renamed a part we use. We now pin `mcp<2`.
+
 ## 2026.09.28.04
 - New: `mcp-server/`, a read-only Python MCP server with 14 tools.
 - The add-on is unchanged.
