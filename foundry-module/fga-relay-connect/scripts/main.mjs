@@ -1,5 +1,6 @@
 import { RelayLink } from "./link.mjs";
 import { makeCommands } from "./commands.mjs";
+import { installPanel } from "./indicators.mjs";
 
 const ID = "fga-relay-connect";
 
@@ -30,11 +31,23 @@ const MESSAGES = {
 };
 
 let lastState = null;
+let lastChange = null;
 let link = null;
+
+/** Status panels that are open on a settings page. Closed ones drop out on the next refresh. */
+const panels = new Set();
+
+function refreshPanels() {
+  for (const panel of [...panels]) {
+    if (!panel.element.isConnected) panels.delete(panel);
+    else panel.refresh();
+  }
+}
 
 function onState(state) {
   if (state === lastState) return;
   lastState = state;
+  lastChange = Date.now();
   const text = game.i18n.localize(MESSAGES[state] ?? MESSAGES.off);
   console.log(`${ID} | ${text}`);
   // Only nag the GM about problems and the first successful connection.
@@ -43,6 +56,7 @@ function onState(state) {
     ui.notifications?.[level](text);
   }
   game.modules.get(ID).api.state = state;
+  refreshPanels();
 }
 
 Hooks.once("init", () => {
@@ -74,6 +88,27 @@ Hooks.once("init", () => {
     onChange: () => game.settings.get(ID, "enabled") && (link.stop(), link.start())
   });
   game.modules.get(ID).api = { state: "off", commands: {} };
+});
+
+/** Show live status lights at the top of our settings. */
+Hooks.on("renderSettingsConfig", (app, html) => {
+  const root = html instanceof HTMLElement ? html : (app.element ?? html?.[0]);
+  if (!root?.querySelector) return;
+  const panel = installPanel(root, {
+    doc: document,
+    localize: (key) => game.i18n.localize(key),
+    getState: () => lastState ?? "off",
+    getSince: () => lastChange,
+    getSaved: () => ({ url: game.settings.get(ID, "url"), key: game.settings.get(ID, "key") }),
+    getEnabled: () => game.settings.get(ID, "enabled"),
+    securePage: window.location.protocol === "https:",
+    onReconnect: () => {
+      if (!link || !game.settings.get(ID, "enabled")) return;
+      link.stop();
+      link.start();
+    }
+  });
+  if (panel) panels.add(panel);
 });
 
 Hooks.once("ready", () => {

@@ -169,3 +169,9 @@
 - Not tried live yet. Class items added this way do not run level up advancement, so set hit points and levels by hand.
 - Found while testing: a token placed from an actor may take the actor's prototype token name, so check names after placing.
 
+## 2026-09-29: status lights on the module settings page (module .10)
+
+- New scripts/indicators.mjs: a status panel above the connect switch (live, follows the link state), address and key checks under their fields, an unsaved changes note, and a Reconnect now button. Hooked in with renderSettingsConfig in main.mjs.
+- Tested three ways: pure tests in tests/indicators.test.mjs, the page code against a real DOM library, and main.mjs against a fake Foundry (connect, bad key, reconnect, closed window). Not looked at in a real Foundry window yet.
+- Only the module changed. Relay and mcp-server stay as they were.
+

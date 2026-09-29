@@ -19,6 +19,34 @@
       "NoSettings": "Rest Relay: set the relay address and connect key in module settings.",
       "BadKey": "Rest Relay: the relay rejected the connect key. Copy it again from the relay page.",
       "Replaced": "Rest Relay: another browser took over the link."
+    },
+    "Panel": {
+      "Connected": "Connected to the relay",
+      "ConnectedDetail": "The relay can see this browser and send it commands.",
+      "Connecting": "Connecting...",
+      "ConnectingDetail": "Trying to reach the relay. It will keep retrying by itself.",
+      "Off": "Not connected",
+      "OffDetail": "Turn on \"Connect this browser to the relay\" and save.",
+      "NoSettings": "Not connected: settings missing",
+      "NoSettingsDetail": "Fill in the relay address and the connect key, then save.",
+      "BadKey": "Not connected: the relay rejected the key",
+      "BadKeyDetail": "Copy the connect key again from the relay page, paste it here and save.",
+      "Replaced": "Not connected: another browser took over",
+      "ReplacedDetail": "Only one browser can be linked. Use Reconnect here to take it back.",
+      "Since": "Connected since",
+      "Reconnect": "Reconnect now",
+      "Pending": "You have changes that are not saved yet. Click Save Changes to use them."
+    },
+    "Check": {
+      "AddressOk": "The address looks right.",
+      "AddressEmpty": "Paste the relay address from the relay web page.",
+      "AddressBad": "That is not a web address. It should look like wss://rest-relay.example.com",
+      "AddressHttp": "Use wss:// or ws:// here, not http:// or https://.",
+      "AddressNeedsWss": "Foundry is on https, so the address must start with wss://.",
+      "KeyOk": "The key looks right.",
+      "KeyEmpty": "Paste the connect key from the relay web page.",
+      "KeySpaces": "The key has spaces in it. Copy it again with no extra spaces.",
+      "KeyShort": "The key looks too short. Copy the whole key."
     }
   }
 }

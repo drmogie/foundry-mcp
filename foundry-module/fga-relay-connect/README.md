@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.9
+Version: 2026.09.29.10
 
 Foundry module that links one browser to your Foundry VTT MCP & Rest Relay (add-on in https://github.com/drmogie/ha-foundry-vtt-addon).
 
@@ -21,9 +21,14 @@ Settings are per browser. Players leave it off.
 - Never touches User or Setting documents.
 
 ## Tests
-    node --test tests/link.test.mjs tests/commands.test.mjs
+    node --test tests/link.test.mjs tests/commands.test.mjs tests/extras.test.mjs tests/indicators.test.mjs
 
 ## Changelog
+### 2026.09.29.10
+- Status lights on the module settings page. A panel at the top shows if the module is connected to the relay: green when connected (with the time), amber while connecting, red for a missing setting, a rejected key or another browser taking over, grey when off. It updates live while the page is open.
+- Checks under the relay address and connect key fields, as you type: right scheme, wss needed on an https Foundry page, key present and not cut short. A note says when you have changes that are not saved yet.
+- A Reconnect now button in the panel.
+
 ### 2026.09.29.9
 - Compendium import can add Item entries (spells, features, gear) straight onto an actor. Give `actorUuid`, and one `id` or a list of `ids` (up to 30).
 

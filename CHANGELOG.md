@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.9
+- Module 2026.09.29.10: status lights on the module settings page (connected, connecting, problem, off), checks for the relay address and connect key as you type, an unsaved changes note, and a Reconnect now button.
+- Relay and mcp-server are unchanged (relay 2026.09.29.10, mcp-server 2026.09.29.8).
+
 ## 2026.09.29.8
 - Add spells, features and gear from a compendium straight onto an actor: `foundry_import_from_pack` now takes `actor_uuid` and `ids` (up to 30 at a time).
 - `foundry_create` can make a document inside a parent, like an item on an actor (`parent_uuid`).
