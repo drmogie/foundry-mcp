@@ -14,6 +14,8 @@ export LOG_LEVEL="$(get log_level)"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 export ADMIN_USERNAME="$(get admin_username)"
 export ADMIN_PASSWORD="$(get admin_password)"
+export WRITE_WORLDS="$(get write_worlds)"
+export WRITE_WORLDS="${WRITE_WORLDS:-mcp-test}"
 
 echo "Starting FGA Relay on port ${PORT} (log level: ${LOG_LEVEL})"
 cd /app

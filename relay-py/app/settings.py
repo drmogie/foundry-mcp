@@ -15,6 +15,11 @@ class Settings:
     admin_password: str
     port: int = 3011
     log_level: str = "info"
+    write_worlds: str = "mcp-test"
+
+    def world_may_write(self, world_id: str | None) -> bool:
+        allowed = {w.strip() for w in self.write_worlds.split(",") if w.strip()}
+        return "*" in allowed or (world_id or "") in allowed
 
     @property
     def login_configured(self) -> bool:
@@ -28,6 +33,7 @@ class Settings:
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),
             port=int(os.environ.get("PORT", "3011")),
             log_level=os.environ.get("LOG_LEVEL", "info"),
+            write_worlds=os.environ.get("WRITE_WORLDS", "mcp-test"),
         )
 
 

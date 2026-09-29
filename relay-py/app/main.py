@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from . import __version__, auth
 from .hub import Client, Hub, HubError
+from .v1 import register_v1
 from .settings import Settings, load_connect_key, new_connect_key, session_secret
 from .tokens import Token, TokenError, TokenStore
 
@@ -205,6 +206,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     # ----- REST API (API token) -----
+
+    register_v1(app, hub, settings, api_token, pick_client)
 
     @app.get("/api/v1/whoami")
     async def whoami(request: Request) -> dict[str, Any]:

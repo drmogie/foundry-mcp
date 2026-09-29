@@ -1,5 +1,5 @@
 name: FGA Relay
-version: "2026.09.29.2"
+version: "2026.09.29.3"
 slug: fga_relay
 image: ghcr.io/drmogie/{arch}-addon-fga-relay
 description: Our own REST API relay between Foundry VTT and tools like Claude. Easy setup, one login.
@@ -18,7 +18,9 @@ options:
   log_level: info
   admin_username: ""
   admin_password: ""
+  write_worlds: mcp-test
 schema:
   log_level: list(debug|info|warning|error)
   admin_username: str?
   admin_password: password?
+  write_worlds: str?

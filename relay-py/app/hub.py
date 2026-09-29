@@ -15,6 +15,10 @@ class HubError(Exception):
     """A problem worded so a person can act on it."""
 
 
+class FoundryError(HubError):
+    """Foundry got the request and said no (nothing found, bad data, not allowed)."""
+
+
 @dataclass
 class Client:
     client_id: str
@@ -87,7 +91,7 @@ class Hub:
         finally:
             self._pending.pop(rid, None)
         if not reply.get("ok", False):
-            raise HubError(str(reply.get("error") or "Foundry reported an error."))
+            raise FoundryError(str(reply.get("error") or "Foundry reported an error."))
         return reply.get("data")
 
     async def close_all(self, code: int, reason: str) -> None:

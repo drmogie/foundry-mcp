@@ -1,6 +1,6 @@
 # FGA Relay
 
-Version: 2026.09.29.2
+Version: 2026.09.29.3
 
 Our own relay between Foundry VTT and tools like Claude.
 It is the REST API. The MCP server sits on top of it.
@@ -14,15 +14,38 @@ It is the REST API. The MCP server sits on top of it.
 - Make a new connect key at any time.
 - API tokens: read only or read and write, limited to one world if you like, with an optional expiry. Each token shows once. The page lists them with last used time and a Revoke button.
 
-REST routes for actors, items, rolls and the rest come next.
-
 ## API tokens
 Make one on the relay page. Send it in the `x-api-key` header, or as `Authorization: Bearer <token>`.
 
-Routes today:
-- GET /api/v1/whoami shows which token you are using.
-- GET /api/v1/clients lists connected Foundry clients (only the token's world if it is limited).
+Every route needs a token. Add `?client_id=...` if more than one Foundry client is connected.
+
+Read routes (any token):
+- GET /api/v1/world shows the world, system, version and counts.
+- GET /api/v1/documents/{type}?q=bob&limit=20 lists Actor, Item, Scene, JournalEntry, Macro, RollTable, Playlist, Folder or Combat.
+- GET /api/v1/document?uuid=Actor.abc gives one document. Add `source=true` for raw data instead of prepared data.
+- GET /api/v1/chat?limit=20 gives the latest chat messages.
+- GET /api/v1/encounters lists combats and combatants.
+- GET /api/v1/effects?uuid=Actor.abc lists active effects on an actor or token.
+- GET /api/v1/scene gives the active scene. Use `id`, `name` or `viewed=true` to pick another.
+- GET /api/v1/users lists users.
+- GET /api/v1/clients lists connected Foundry clients.
 - POST /api/v1/ping tests the link to Foundry.
+- POST /api/v1/rolls with `"chat": false` rolls dice without posting.
+
+Write routes (write token, allowed worlds only):
+- PATCH /api/v1/document with `uuid` and `data` changes a document.
+- POST /api/v1/documents/{type} with `data` (and optional `parentUuid`) makes one. Use a parent to add an item to an actor.
+- DELETE /api/v1/document?uuid=...&confirm=true deletes one. It refuses without confirm.
+- POST /api/v1/chat with `content` (and optional `actorId`, `alias`, `whisper`) posts a message.
+- POST /api/v1/rolls with `formula` (and optional `flavor`) rolls and posts to chat.
+- POST /api/v1/items/use with `uuid` (and optional `targets`, `activityId`) uses an item.
+- POST /api/v1/tokens/move with `uuid`, `x`, `y` moves a token.
+- POST /api/v1/scene/switch with `id` or `name`, and optional `activate`.
+
+Answers look like `{"ok": true, "clientId": "...", "data": ...}`.
+Errors come back as `{"detail": "plain words"}`. A 400 means Foundry said no. A 502 means Foundry could not be reached.
+
+The relay never touches User or Setting documents.
 
 Example:
 
@@ -56,6 +79,7 @@ Use one dedicated GM browser tab. Commands only work while that tab is open.
 
 ## Settings
 - log_level: debug, info, warning or error.
+- write_worlds: world ids where write routes are allowed. Default `mcp-test`. Use a comma between several, or `*` for all. Reads work in every world.
 - admin_username and admin_password: the web page login.
 
 The connect key and session secret are made on first start and kept in /data.

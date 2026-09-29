@@ -1,13 +1,10 @@
 import { RelayLink } from "./link.mjs";
+import { makeCommands } from "./commands.mjs";
 
 const ID = "fga-relay-connect";
 
-/** Commands the relay can ask for. More arrive in later versions. */
-const commands = {
-  async ping() {
-    return { pong: true, time: Date.now() };
-  }
-};
+/** Built once Foundry is ready. See commands.mjs for the list. */
+let commands = {};
 
 function hello() {
   return {
@@ -76,15 +73,17 @@ Hooks.once("init", () => {
     default: "",
     onChange: () => game.settings.get(ID, "enabled") && (link.stop(), link.start())
   });
-  game.modules.get(ID).api = { state: "off", commands };
+  game.modules.get(ID).api = { state: "off", commands: {} };
 });
 
 Hooks.once("ready", () => {
+  commands = makeCommands({ game, fromUuid, Roll, ChatMessage, CONFIG });
+  game.modules.get(ID).api.commands = commands;
   link = new RelayLink({
     getSettings: () => ({ url: game.settings.get(ID, "url"), key: game.settings.get(ID, "key") }),
     hello,
     handle: async (type, data) => {
-      const fn = commands[type];
+      const fn = Object.hasOwn(commands, type) ? commands[type] : null;
       if (!fn) throw new Error(`Unknown command: ${type}`);
       return fn(data);
     },

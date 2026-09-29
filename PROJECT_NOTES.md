@@ -89,3 +89,13 @@
 - 36 relay tests pass. A real browser test (Chromium) found a duplicate element id that broke the world dropdown. Fixed.
 - Lesson: click through the real page, not only the API tests.
 - Next: Stage 3 REST routes (actors, items, scenes, chat, rolls) and matching module commands.
+
+## 2026-09-29: Stage 3 REST routes (relay 2026.09.29.3, module 2026.09.29.2)
+
+- Module `commands.mjs`: world, list, get, chat, encounters, effects, scene, users, roll, sendChat, update, create, delete, useItem, moveToken, switchScene. Foundry objects come in through a context, so tests use a pretend Foundry (33 module tests).
+- Relay `v1.py`: REST routes over those commands. Read token reads, write token writes. Quiet rolls are reads.
+- Write guard: `write_worlds` add-on option, default `mcp-test`. Delete needs `confirm=true`.
+- Foundry errors -> 400, no client or lost link -> 502.
+- 49 relay tests (a pretend Foundry client on a real socket).
+- Not yet run against real Foundry. Needs the new module copied into Foundry, then try the routes from the PC.
+- Next: point mcp-server at our relay, compare with ThreeHats, then Stage 4 (combat control, apply damage, activity log).
