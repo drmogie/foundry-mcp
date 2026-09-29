@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.28.09
+- Zip code for the install link: `e933d874ae67714b6dee84d2c9a4e44b02a4f1f8`
 - Fix: `foundry_download_folder` saved files with `%20` in their names. It now saves the real name (spaces).
 - 26 tests pass.
 
