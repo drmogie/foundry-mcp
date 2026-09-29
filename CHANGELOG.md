@@ -1,5 +1,9 @@
 # Changelog
 
+## Install link for 2026.09.28.08
+- Zip code: `eb6b9bc51499462b7f485b7ac618309af25550e3`
+- Use it in the link: `https://github.com/drmogie/foundry-mcp/archive/<code>.zip#subdirectory=mcp-server`
+
 ## 2026.09.28.08
 - Fix: an old `build/` folder was committed by mistake. Installs from a zip or Git picked up stale code (version .05) and had no new tools.
 - Removed `build/`, and ignore `build/` and `dist/` from now on.

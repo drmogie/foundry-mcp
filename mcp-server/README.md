@@ -56,7 +56,7 @@ It does not change Foundry. It only copies files out.
 claude mcp add foundry \
   --env FOUNDRY_API_KEY=YOUR_KEY \
   --env FOUNDRY_RELAY_URL=http://ha-pi4:3010 \
-  -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server" foundry-mcp
+  -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/eb6b9bc51499462b7f485b7ac618309af25550e3.zip#subdirectory=mcp-server" foundry-mcp
 ```
 
 ## Add it to Claude Desktop
@@ -66,7 +66,7 @@ Open the config file and add this under `mcpServers`:
 ```json
 "foundry": {
   "command": "uvx",
-  "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server", "foundry-mcp"],
+  "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/eb6b9bc51499462b7f485b7ac618309af25550e3.zip#subdirectory=mcp-server", "foundry-mcp"],
   "env": {
     "FOUNDRY_API_KEY": "YOUR_KEY",
     "FOUNDRY_RELAY_URL": "http://ha-pi4:3010"
@@ -76,6 +76,9 @@ Open the config file and add this under `mcpServers`:
 
 This needs `uv` installed on the computer.
 It does not need Git. The link downloads a zip file.
+The long code in the link pins one exact version. That is on purpose.
+A link that always means "latest" gets cached, and you can be stuck on an old copy.
+To update, swap in the new code from the changelog, then restart Claude Desktop.
 
 ## Run the tests
 
