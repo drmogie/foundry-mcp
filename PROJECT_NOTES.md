@@ -121,3 +121,4 @@
 - Tests: 57 relay, 47 module, 81 mcp-server.
 - Not yet run against real Foundry. Try in MCP Test: make a combat, next turn, apply damage to Bob, read the log.
 - Next: live test, then maybe show the activity log on the relay web page.
+- Live check on ha-pi4 (relay .5, module .4, MCP Test): combat made with Bob and Foreman, initiative rolled, next turn worked, 5 fire damage then 5 healing on Bob (87 to 82 to 87), combat ended, activity log showed all five writes under the ClaudeDesktop token.
