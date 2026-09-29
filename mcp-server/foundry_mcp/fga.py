@@ -404,4 +404,4 @@ class FgaClient(RelayClient):
         target = b.get("targetUuid")
         if not target and b.get("targetName"):
             target = await self._token_uuid(b["targetName"], None)
-        return await self._fga("POST", "/api/v1/items/use", body={"uuid": item_uuid, "targets": [target] if target else None, "clearArea": bool(b.get("clearArea"))})
+        return await self._fga("POST", "/api/v1/items/use", body={"uuid": item_uuid, "targets": [target] if target else None, "clearArea": bool(b.get("clearArea")), "template": bool(b.get("template"))})

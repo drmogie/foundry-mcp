@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.11
+Version: 2026.09.29.12
 
 Foundry module that links one browser to your Foundry VTT MCP & Rest Relay (add-on in https://github.com/drmogie/ha-foundry-vtt-addon).
 
@@ -24,6 +24,10 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs tests/extras.test.mjs tests/indicators.test.mjs
 
 ## Changelog
+### 2026.09.29.12
+
+- Using an item no longer asks anyone to click the board to place a spell area. Pass template to place one.
+
 ### 2026.09.29.11
 
 - Regions (spell areas) can be deleted through the relay.

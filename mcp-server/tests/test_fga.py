@@ -249,12 +249,12 @@ async def test_use_item_by_name_with_target_by_name(relay):
     await server.foundry_use_item("Actor.a1", ability_name="shortbow", target_name="Foreman")
     m, path, _q, body = last(relay)
     assert (m, path) == ("POST", "/api/v1/items/use")
-    assert body == {"uuid": "Actor.a1.Item.i1", "targets": ["Scene.s1.Token.t2"], "clearArea": False}
+    assert body == {"uuid": "Actor.a1.Item.i1", "targets": ["Scene.s1.Token.t2"], "clearArea": False, "template": False}
 
 
 async def test_use_item_by_uuid_without_target(relay):
     await server.foundry_use_item("Actor.a1", ability_uuid="Actor.a1.Item.i1")
-    assert last(relay)[3] == {"uuid": "Actor.a1.Item.i1", "clearArea": False}
+    assert last(relay)[3] == {"uuid": "Actor.a1.Item.i1", "clearArea": False, "template": False}
 
 
 async def test_use_item_can_clear_the_spell_area(relay):

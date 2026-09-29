@@ -585,3 +585,13 @@ test("hit dice: only on a short rest, sane numbers, and needs a class", async ()
   bob.items = [];
   await assert.rejects(c.rest({ uuid: "Actor.a1", type: "short", hitDice: 1 }), /no class with hit dice/);
 });
+
+test("useItem does not ask for a template unless told to", async () => {
+  const { w, c } = setup();
+  const item = w.docs.get("Item.i1");
+  const seen = [];
+  item.use = async (config) => { seen.push(config.create.measuredTemplate); };
+  await c.useItem({ uuid: "Item.i1" });
+  await c.useItem({ uuid: "Item.i1", template: true });
+  assert.deepEqual(seen, [false, true]);
+});

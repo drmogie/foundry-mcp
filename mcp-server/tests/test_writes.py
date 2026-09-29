@@ -186,7 +186,7 @@ async def test_use_item(monkeypatch):
     assert "exactly one" in await server.foundry_use_item("Actor.a")
     await server.foundry_use_item("Actor.a", ability_name="Longbow", target_name="Goblin")
     assert sent[0].url.path == "/dnd5e/use-item"
-    assert body(sent[0]) == {"actorUuid": "Actor.a", "abilityName": "Longbow", "targetName": "Goblin", "clearArea": False}
+    assert body(sent[0]) == {"actorUuid": "Actor.a", "abilityName": "Longbow", "targetName": "Goblin", "clearArea": False, "template": False}
 
 
 async def test_move_token(monkeypatch):

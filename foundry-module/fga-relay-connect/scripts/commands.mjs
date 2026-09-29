@@ -357,7 +357,7 @@ export function makeCommands(ctx) {
       return { deleted: info };
     },
 
-    async useItem({ uuid, targets, activityId, clearArea } = {}) {
+    async useItem({ uuid, targets, activityId, clearArea, template } = {}) {
       const item = await find(uuid);
       if (item.documentName !== "Item") throw new Error(`${uuid} is not an item.`);
       if (Array.isArray(targets)) {
@@ -374,9 +374,9 @@ export function makeCommands(ctx) {
       if (activityId) {
         const activity = item.system?.activities?.get?.(activityId);
         if (!activity) throw new Error(`No activity ${activityId} on ${item.name}.`);
-        await activity.use({}, { configure: false }, {});
+        await activity.use({ create: { measuredTemplate: !!template } }, { configure: false }, {});
       } else {
-        await item.use({}, { configure: false });
+        await item.use({ create: { measuredTemplate: !!template } }, { configure: false });
       }
       const out = { used: brief(item), targets: targets ?? [] };
       // Spells with a template leave a Region on the scene. Report it, and remove it on request.

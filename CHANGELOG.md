@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.11
+- Relay 2026.09.29.12, module 2026.09.29.12, mcp-server 2026.09.29.10. Update all three.
+- `foundry_use_item` skips the click-to-place spell area by default. `place_template` turns it back on.
+
 ## 2026.09.29.10
 - Spell areas: relay 2026.09.29.11, module 2026.09.29.11, mcp-server 2026.09.29.9. Update all three.
 - Regions can be deleted through the relay. `foundry_use_item` has `clear_area` to remove the area a cast leaves, and reports any area it finds.
