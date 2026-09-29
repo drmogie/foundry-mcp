@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import unquote
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
@@ -249,7 +250,8 @@ async def foundry_download_folder(
                 total += len(raw)
                 if total > MAX_BYTES:
                     return _download_report(target_root, saved, total, "Stopped: over the 50 MB limit.")
-                rel = item_path[len(root):].lstrip("/")
+                # Foundry lists paths URL-encoded (a%20b). Ask with the encoded path, save with the real name.
+                rel = unquote(item_path[len(root):]).lstrip("/")
                 out = _safe_join(target_root, *rel.split("/"))
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_bytes(raw)

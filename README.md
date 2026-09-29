@@ -2,7 +2,7 @@
 
 Lets Claude work with a Foundry VTT test world.
 
-Version: 2026.09.28.08
+Version: 2026.09.28.09
 
 ## What is in here
 

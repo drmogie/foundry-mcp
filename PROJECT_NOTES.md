@@ -55,3 +55,10 @@
 - Cause: `mcp-server/build/lib/` (made by a local `pip install` in the source tree) was committed. setuptools reuses `build/lib` files when they look newer than the source, and files from a zip all share one timestamp.
 - Fix: `git rm` the folder, ignore `build/` and `dist/`.
 - Lesson: install into a copy or a venv, never `pip install` in the source tree, and check `git status` for build output before committing.
+
+## 2026-09-28: first live file copies (2026.09.28.09)
+
+- `foundry_read_file` and `foundry_download_folder` work on the live relay.
+- Copied Ammo Tracker, Battle Director, Scene Director, and Character Popup from the server into Downloads/D&D mods.
+- `/file-system` lists paths URL-encoded (`A%20B.webp`). Ask with the encoded path, save with the decoded name.
+- Running several downloads at once timed out. Run them one at a time.

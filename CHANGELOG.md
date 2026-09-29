@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.28.09
+- Fix: `foundry_download_folder` saved files with `%20` in their names. It now saves the real name (spaces).
+- 26 tests pass.
+
 ## Install link for 2026.09.28.08
 - Zip code: `eb6b9bc51499462b7f485b7ac618309af25550e3`
 - Use it in the link: `https://github.com/drmogie/foundry-mcp/archive/<code>.zip#subdirectory=mcp-server`

@@ -292,3 +292,13 @@ async def test_download_folder_needs_a_path(monkeypatch, tmp_path):
 async def test_download_tool_is_off_by_default():
     names = {t.name for t in await server.mcp.list_tools()}
     assert "foundry_download_folder" not in names
+
+
+async def test_download_folder_decodes_percent_names(monkeypatch, tmp_path):
+    tree = {"modules/m": [{"name": "A B.webp", "path": "modules/m/A%20B.webp", "type": "file"}]}
+    seen = file_relay(monkeypatch, tree=tree, files={"modules/m/A%20B.webp": b"img"})
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(tmp_path))
+    await server.foundry_download_folder("modules/m")
+    assert ("get", "modules/m/A%20B.webp") in seen  # asked with the encoded path
+    assert (tmp_path / "m" / "A B.webp").read_bytes() == b"img"  # saved with the real name
+    assert not (tmp_path / "m" / "A%20B.webp").exists()
