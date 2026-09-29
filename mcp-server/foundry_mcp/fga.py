@@ -258,7 +258,7 @@ class FgaClient(RelayClient):
             data = dict(b.get("data") or {})
             if b.get("folder"):
                 data["folder"] = b["folder"]
-            return await self._fga("POST", f"/api/v1/documents/{b.get('entityType')}", body={"data": data})
+            return await self._fga("POST", f"/api/v1/documents/{b.get('entityType')}", body={"data": data, "parentUuid": b.get("parentUuid") or None})
         if endpoint == "/update":
             return await self._update(p["uuid"], dict(b.get("data") or {}))
         if endpoint == "/delete":
@@ -324,7 +324,8 @@ class FgaClient(RelayClient):
                 "uuid": b.get("uuid"), "name": b.get("name"), "chat": b.get("chat", True)})
         if endpoint == "/compendium/import":
             return await self._fga("POST", "/api/v1/compendium/import", body={
-                "pack": b["pack"], "id": b["id"], "name": b.get("name"), "folder": b.get("folder"),
+                "pack": b["pack"], "id": b.get("id"), "ids": b.get("ids"), "actorUuid": b.get("actorUuid"),
+                "name": b.get("name"), "folder": b.get("folder"),
                 "place": bool(b.get("place")), "sceneId": b.get("sceneId"), "x": b.get("x"), "y": b.get("y"),
                 "hidden": bool(b.get("hidden"))})
         raise RelayError(f"The Rest Relay does not have {endpoint} yet. Nothing was changed.")

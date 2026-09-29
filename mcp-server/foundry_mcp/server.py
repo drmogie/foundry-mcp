@@ -329,9 +329,13 @@ async def foundry_create(
     entity_type: Annotated[str, Field(description="Scene, Actor, Item, JournalEntry, RollTable, Cards, Macro or Playlist.")],
     data: Annotated[dict, Field(description="The new document's fields, for example name and type.")],
     folder: Annotated[str, Field(description="Optional folder uuid.")] = "",
+    parent_uuid: Annotated[str, Field(description="Make it inside this document, like an Item on an actor. Needs the Rest Relay.")] = "",
 ) -> str:
     """Create a new document (actor, item, scene, journal, ...)."""
-    return await _write("POST", "/create", body={"entityType": entity_type, "data": data, "folder": folder})
+    body: dict = {"entityType": entity_type, "data": data, "folder": folder}
+    if parent_uuid:
+        body["parentUuid"] = parent_uuid
+    return await _write("POST", "/create", body=body)
 
 
 async def foundry_update(
@@ -699,7 +703,7 @@ async def foundry_roll_table(
 
 async def foundry_import_from_pack(
     pack: Annotated[str, Field(description='Compendium id, like "dnd5e.monsters".')],
-    id: Annotated[str, Field(description="Entry id from foundry_search_pack.")],
+    id: Annotated[str, Field(description="Entry id from foundry_search_pack.")] = "",
     name: Annotated[str, Field(description="Rename the copy.")] = "",
     folder: Annotated[str, Field(description="Folder id for the copy.")] = "",
     place: Annotated[bool, Field(description="Actors only: also put a token on the scene.")] = False,
@@ -707,13 +711,25 @@ async def foundry_import_from_pack(
     x: float | None = None,
     y: float | None = None,
     hidden: bool = False,
+    actor_uuid: Annotated[str, Field(description="Item compendiums only: add the copies straight onto this actor (spells, features, gear).")] = "",
+    ids: Annotated[list[str] | None, Field(description="Several entry ids from the same compendium. Only with actor_uuid. Up to 30.")] = None,
 ) -> str:
-    """Copy a compendium entry into the world, like a monster. Can place its token. Needs the Rest Relay."""
+    """Copy a compendium entry into the world, like a monster. Can place its token.
+
+    With actor_uuid, copies spells, features or gear from an Item compendium onto that actor instead. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
-    return await _write("POST", "/compendium/import", body={
-        "pack": pack, "id": id, "name": name, "folder": folder, "place": place or None,
-        "sceneId": scene_id, "x": x, "y": y, "hidden": hidden or None})
+    if not (id or ids):
+        return "Error: give an id, or a list of ids from foundry_search_pack."
+    body: dict = {"pack": pack, "name": name, "folder": folder, "place": place or None,
+                  "sceneId": scene_id, "x": x, "y": y, "hidden": hidden or None}
+    if id:
+        body["id"] = id
+    if ids:
+        body["ids"] = ids
+    if actor_uuid:
+        body["actorUuid"] = actor_uuid
+    return await _write("POST", "/compendium/import", body=body)
 
 
 WRITE_TOOLS = (

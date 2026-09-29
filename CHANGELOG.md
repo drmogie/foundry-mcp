@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.09.29.8
+- Add spells, features and gear from a compendium straight onto an actor: `foundry_import_from_pack` now takes `actor_uuid` and `ids` (up to 30 at a time).
+- `foundry_create` can make a document inside a parent, like an item on an actor (`parent_uuid`).
+- Relay 2026.09.29.10, module 2026.09.29.9, mcp-server 2026.09.29.8. Update all three.
+
 ## 2026.09.29.7
 - The relay moved to the ha-foundry-vtt-addon repository and is now called Foundry VTT MCP & Rest Relay. The `relay-py` folder and its build are gone from this repository.
 - Module 2026.09.29.8 and mcp-server 2026.09.29.7 only change wording.

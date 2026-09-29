@@ -738,12 +738,35 @@ export function makeCommands(ctx) {
       };
     },
 
-    async importFromPack({ pack, id, name, folder, place, sceneId, x, y, hidden } = {}) {
+    async importFromPack({ pack, id, ids, name, folder, place, sceneId, x, y, hidden, actorUuid } = {}) {
       need(pack, "pack");
-      need(id, "id");
+      const wanted = Array.isArray(ids) && ids.length ? ids.map(String) : [];
+      if (id) wanted.unshift(String(id));
+      if (!wanted.length) throw new Error("id is required.");
       const p = game.packs?.get(pack);
       if (!p) throw new Error(`No compendium called ${pack}. List them with packs.`);
       if (!ALLOWED.includes(p.documentName)) throw new Error(`${p.documentName} documents are not allowed through the relay.`);
+      if (actorUuid) {
+        // Copy Item entries (spells, features, gear, class) straight onto an actor.
+        if (p.documentName !== "Item") throw new Error(`${pack} holds ${p.documentName} entries. Only Item compendiums can add to an actor.`);
+        if (wanted.length > 30) throw new Error("Add 30 items or fewer at a time.");
+        const actor = allowed(await find(actorUuid));
+        if (actor.documentName !== "Actor") throw new Error(`${actorUuid} is not an actor.`);
+        const worldItems = game.collections.get("Item");
+        const rows = [];
+        for (const one of wanted) {
+          const source = await p.getDocument(one);
+          if (!source) throw new Error(`Nothing with id ${one} in ${pack}. Nothing was added.`);
+          const data = worldItems?.fromCompendium ? worldItems.fromCompendium(source) : source.toObject();
+          delete data._id;
+          if (name && wanted.length === 1) data.name = name;
+          rows.push(data);
+        }
+        const created = await actor.createEmbeddedDocuments("Item", rows);
+        return { actor: brief(actor), added: created.map(brief) };
+      }
+      if (wanted.length > 1) throw new Error("Give one id at a time, unless you also give an actor to add to.");
+      id = wanted[0];
       const world = game.collections.get(p.documentName);
       if (!world?.importFromCompendium) throw new Error(`Cannot import ${p.documentName} documents.`);
       const doc = await world.importFromCompendium(p, id, { ...(name ? { name } : {}), ...(folder ? { folder } : {}) }, {});

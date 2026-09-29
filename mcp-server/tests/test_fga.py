@@ -199,6 +199,13 @@ async def test_create_uses_the_type_in_the_path(relay):
     assert body == {"data": {"name": "Guard", "folder": "Folder.f1"}}
 
 
+async def test_create_can_be_made_inside_a_parent(relay):
+    await server.foundry_create("Item", {"name": "Dagger", "type": "weapon"}, parent_uuid="Actor.a1")
+    m, path, _q, body = last(relay)
+    assert (m, path) == ("POST", "/api/v1/documents/Item")
+    assert body == {"data": {"name": "Dagger", "type": "weapon"}, "parentUuid": "Actor.a1"}
+
+
 async def test_plain_update_is_a_patch(relay):
     await server.foundry_update("Actor.a1", {"name": "Bobby"})
     m, path, _q, body = last(relay)
@@ -445,6 +452,12 @@ async def test_target_tokens_journals_tables_and_import(relay):
     assert "table name or uuid" in await server.foundry_roll_table()
     await server.foundry_import_from_pack(pack="dnd5e.monsters", id="m1", name="Gob", place=True, x=5, y=6)
     assert last(relay)[3] == {"pack": "dnd5e.monsters", "id": "m1", "name": "Gob", "place": True, "x": 5, "y": 6, "hidden": False}
+    await server.foundry_import_from_pack(pack="dnd5e.spells", ids=["fb", "hx"], actor_uuid="Actor.a1")
+    assert last(relay)[:2] == ("POST", "/api/v1/compendium/import")
+    assert last(relay)[3] == {"pack": "dnd5e.spells", "ids": ["fb", "hx"], "actorUuid": "Actor.a1", "place": False, "hidden": False}
+    await server.foundry_import_from_pack(pack="dnd5e.spells", id="fb", actor_uuid="Actor.a1")
+    assert last(relay)[3]["id"] == "fb" and "ids" not in last(relay)[3]
+    assert "give an id" in await server.foundry_import_from_pack(pack="dnd5e.spells")
 
 
 async def test_new_tools_explain_when_not_on_our_relay(monkeypatch):

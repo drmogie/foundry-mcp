@@ -60,12 +60,20 @@ function world() {
   const actorsCollection = {
     async importFromCompendium(p, id, update) { log.push(["import", p.collection, id, update]); return doc("Actor", `imp-${id}`, { name: update.name ?? "Goblin", async getTokenDocument(d) { return { toObject: () => ({ name: d.name ?? "Goblin", ...d }) }; } }); }
   };
+  const spellSource = { fireball: { _id: "fb", name: "Fireball", type: "spell", system: { level: 3 } }, hex: { _id: "hx", name: "Hex", type: "spell", system: { level: 1 } } };
+  const spellPack = {
+    collection: "dnd5e.spells", title: "Spells", documentName: "Item", metadata: { packageName: "dnd5e" }, index: { size: 2 },
+    async getIndex() { return []; },
+    async getDocument(id) { const s = Object.values(spellSource).find((x) => x._id === id); return s ? { name: s.name, toObject: () => ({ ...s }) } : null; }
+  };
+  const itemsCollection = { fromCompendium: (source) => ({ ...source.toObject(), _stats: { compendiumSource: "Compendium.dnd5e.spells" } }) };
+  bob.createEmbeddedDocuments = async (type, rows) => { log.push(["embedItems", type, rows]); return rows.map((r, i) => doc("Item", `new${i}`, { name: r.name })); };
   const game = {
     user: { targets: new Set() },
     scenes: { viewed: scene, active: scene, get: (id) => (id === "s1" ? scene : undefined) },
     messages: { contents: messages },
-    collections: new Map([["RollTable", { contents: [table] }], ["Actor", actorsCollection]]),
-    packs: { contents: [pack], get: (id) => (id === "dnd5e.monsters" ? pack : undefined) },
+    collections: new Map([["RollTable", { contents: [table] }], ["Actor", actorsCollection], ["Item", itemsCollection]]),
+    packs: { contents: [pack, spellPack], get: (id) => ({ "dnd5e.monsters": pack, "dnd5e.spells": spellPack })[id] },
     i18n: { localize: (s) => s }
   };
   const CONFIG = {
@@ -246,7 +254,8 @@ test("compendiums: list packs, search one, import an actor and place it", async 
   const { c, log } = world();
   const packs = await c.packs({ type: "Actor", q: "monst" });
   assert.deepEqual(packs.map((p) => p.id), ["dnd5e.monsters"]);
-  assert.deepEqual(await c.packs({ type: "Item" }), []);
+  assert.deepEqual((await c.packs({ type: "Item" })).map((p) => p.id), ["dnd5e.spells"]);
+  assert.deepEqual(await c.packs({ type: "Scene" }), []);
   const idx = await c.packIndex({ pack: "dnd5e.monsters", q: "owl" });
   assert.equal(idx.total, 1);
   assert.equal(idx.results[0].uuid, "Compendium.dnd5e.monsters.Actor.m2");
@@ -259,4 +268,28 @@ test("compendiums: list packs, search one, import an actor and place it", async 
   assert.equal(plain.tokens, undefined);
   await assert.rejects(c.importFromPack({ pack: "dnd5e.monsters" }), /id is required/);
   await assert.rejects(c.importFromPack({ pack: "nope", id: "x" }), /No compendium called nope/);
+});
+
+test("import from pack onto an actor adds cleaned copies of items", async () => {
+  const { c, log } = world();
+  const r = await c.importFromPack({ pack: "dnd5e.spells", ids: ["fb", "hx"], actorUuid: "Actor.a1" });
+  assert.equal(r.actor.name, "Bob");
+  assert.deepEqual(r.added.map((a) => a.name), ["Fireball", "Hex"]);
+  const embed = log.find((l) => l[0] === "embedItems");
+  assert.equal(embed[1], "Item");
+  assert.equal(embed[2].length, 2);
+  assert.equal(embed[2][0]._id, undefined);
+  assert.equal(embed[2][0]._stats.compendiumSource, "Compendium.dnd5e.spells");
+});
+
+test("import onto an actor: one id can be renamed, and mistakes explain themselves", async () => {
+  const { c, log } = world();
+  await c.importFromPack({ pack: "dnd5e.spells", id: "fb", name: "Dark Fireball", actorUuid: "Actor.a1" });
+  assert.equal(log.find((l) => l[0] === "embedItems")[2][0].name, "Dark Fireball");
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.monsters", id: "m1", actorUuid: "Actor.a1" }), /Only Item compendiums can add to an actor/);
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.spells", id: "zzz", actorUuid: "Actor.a1" }), /Nothing with id zzz in dnd5e.spells. Nothing was added/);
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.spells", ids: ["fb", "hx"] }), /one id at a time/);
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.spells", actorUuid: "Actor.a1" }), /id is required/);
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.spells", id: "fb", actorUuid: "Scene.s1" }), /is not an actor/);
+  await assert.rejects(c.importFromPack({ pack: "dnd5e.spells", ids: Array.from({ length: 31 }, (_, i) => `x${i}`), actorUuid: "Actor.a1" }), /30 items or fewer/);
 });

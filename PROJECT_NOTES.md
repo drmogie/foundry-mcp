@@ -160,4 +160,12 @@
 - The relay add-on moved to drmogie/ha-foundry-vtt-addon (folder foundry_mcp_rest_relay) and was renamed Foundry VTT MCP & Rest Relay (add-on version 2026.09.29.9). relay-py, its build workflow and repository.yaml were removed here.
 - New add-on ID, so data does not carry over: new login, connect key and tokens. The module needs the new connect key. The MCP config needs a new token.
 - Module keeps the name FGA Relay Connect and the id fga-relay-connect (renaming the id would break installs). Only its status text changed.
-- Old plan doc in the Claude project still mentions relay-py paths.
+- The plan doc in the Claude project was rewritten for the move.
+
+## 2026-09-29: items onto actors (relay .10, module .9, mcp-server .8)
+
+- foundry_import_from_pack takes actor_uuid and ids: copies spells, features and gear from an Item compendium onto an actor (module cleans them with fromCompendium, then createEmbeddedDocuments). Up to 30 at a time.
+- foundry_create takes parent_uuid. foundry_update with an items list already made items on the actor.
+- Not tried live yet. Class items added this way do not run level up advancement, so set hit points and levels by hand.
+- Found while testing: a token placed from an actor may take the actor's prototype token name, so check names after placing.
+

@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.29.7
+Version: 2026.09.29.8
 
 Lets Claude read a Foundry VTT world.
 It talks to the Foundry VTT MCP & Rest Relay add-on.
@@ -78,7 +78,7 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twenty-two tools appear:
 - foundry_set_token: show, hide, rotate or move a token
 - foundry_create_journal: make a journal or add pages
 - foundry_roll_table: roll on a rollable table
-- foundry_import_from_pack: copy a compendium entry into the world, and place it
+- foundry_import_from_pack: copy a compendium entry into the world, and place it. With actor_uuid it adds spells, features or gear from an Item compendium onto that actor instead (ids takes up to 30)
 
 Safety rules:
 

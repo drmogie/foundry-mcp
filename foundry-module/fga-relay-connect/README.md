@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.8
+Version: 2026.09.29.9
 
 Foundry module that links one browser to your Foundry VTT MCP & Rest Relay (add-on in https://github.com/drmogie/ha-foundry-vtt-addon).
 
@@ -24,6 +24,9 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.9
+- Compendium import can add Item entries (spells, features, gear) straight onto an actor. Give `actorUuid`, and one `id` or a list of `ids` (up to 30).
+
 ### 2026.09.29.8
 - Wording: the relay is now called Foundry VTT MCP & Rest Relay. The module keeps its name and id.
 
