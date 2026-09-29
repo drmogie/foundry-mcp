@@ -14,10 +14,10 @@ from . import __version__
 from .client import RelayClient, RelayError, to_text
 
 INSTRUCTIONS = (
-    "Read-only access to a Foundry VTT world through a self-hosted relay. "
+    "Access to a Foundry VTT world through a self-hosted relay. Read-only unless writes were turned on. "
     "Start with foundry_world_info or foundry_search. "
     "Foundry ids are UUIDs like Actor.abc123 or Scene.xyz789. "
-    "Nothing here changes the world."
+    "Write tools, when present, only work on the allowed test world."
 )
 
 mcp = FastMCP("foundry-mcp", instructions=INSTRUCTIONS)
@@ -271,13 +271,154 @@ def _download_report(target: Path, saved: list[str], total: int, note: str) -> s
     return "\n".join(lines)
 
 
-def register_download_tool() -> None:
+def register_download_tool(target: FastMCP | None = None) -> None:
     """Opt-in. Only offered when FOUNDRY_DOWNLOAD_DIR is set, and it can only write inside it."""
-    mcp.tool()(foundry_download_folder)
+    (target or mcp).tool()(foundry_download_folder)
 
 
 if os.environ.get("FOUNDRY_DOWNLOAD_DIR"):
     register_download_tool()
+
+
+# ---- write tools (opt-in) ---------------------------------------------------
+# Off unless FOUNDRY_ALLOW_WRITES is set. Even then, they only touch worlds listed in
+# FOUNDRY_WRITE_WORLDS (default: mcp-test). Every write is logged to stderr.
+
+
+async def _write(method: str, endpoint: str, *, params: dict | None = None, body: dict | None = None) -> str:
+    try:
+        return to_text(await client().write(method, endpoint, params=params, body=body))
+    except RelayError as exc:
+        return f"Error: {exc}"
+
+
+async def foundry_send_chat(
+    content: Annotated[str, Field(description="Message text. HTML is allowed.")],
+    flavor: str = "",
+    alias: Annotated[str, Field(description="Speaker name to show.")] = "",
+    speaker: Annotated[str, Field(description="Actor id to speak as.")] = "",
+    whisper: Annotated[list[str] | None, Field(description="User ids to whisper to.")] = None,
+) -> str:
+    """Post a chat message in the world."""
+    return await _write(
+        "POST", "/chat", body={"content": content, "flavor": flavor, "alias": alias, "speaker": speaker, "whisper": whisper}
+    )
+
+
+async def foundry_roll(
+    formula: Annotated[str, Field(description='For example "1d20 + 5".')],
+    flavor: str = "",
+    create_chat_message: bool = True,
+    whisper: Annotated[list[str] | None, Field(description="User ids to whisper the result to.")] = None,
+) -> str:
+    """Roll dice in the world."""
+    return await _write(
+        "POST",
+        "/roll",
+        body={"formula": formula, "flavor": flavor, "createChatMessage": create_chat_message, "whisper": whisper},
+    )
+
+
+async def foundry_create(
+    entity_type: Annotated[str, Field(description="Scene, Actor, Item, JournalEntry, RollTable, Cards, Macro or Playlist.")],
+    data: Annotated[dict, Field(description="The new document's fields, for example name and type.")],
+    folder: Annotated[str, Field(description="Optional folder uuid.")] = "",
+) -> str:
+    """Create a new document (actor, item, scene, journal, ...)."""
+    return await _write("POST", "/create", body={"entityType": entity_type, "data": data, "folder": folder})
+
+
+async def foundry_update(
+    uuid: Annotated[str, Field(description="For example Actor.abc123")],
+    data: Annotated[dict, Field(description='Fields to change, for example {"name": "New name"}.')],
+) -> str:
+    """Change fields on one existing document."""
+    return await _write("PUT", "/update", params={"uuid": uuid}, body={"data": data})
+
+
+async def foundry_delete(
+    uuid: Annotated[str, Field(description="For example Actor.abc123")],
+    confirm: Annotated[bool, Field(description="Must be true. Deleting cannot be undone.")] = False,
+) -> str:
+    """Delete one document. Needs confirm=true."""
+    if not confirm:
+        return f"Nothing deleted. Deleting {uuid} cannot be undone. Call again with confirm=true if you are sure."
+    return await _write("DELETE", "/delete", params={"uuid": uuid})
+
+
+async def foundry_switch_scene(
+    scene_id: str = "",
+    name: str = "",
+) -> str:
+    """Make a scene the active scene. Give a scene id or a name."""
+    if bool(scene_id) == bool(name):
+        return "Error: give exactly one of scene_id or name."
+    return await _write("POST", "/switch-scene", body={"sceneId": scene_id, "name": name})
+
+
+async def foundry_use_item(
+    actor_uuid: str,
+    ability_name: Annotated[str, Field(description="Item name, if you have no uuid.")] = "",
+    ability_uuid: str = "",
+    target_uuid: str = "",
+    target_name: str = "",
+) -> str:
+    """D&D 5e: make an actor use an item, like firing a bow. Good for testing mods."""
+    if bool(ability_name) == bool(ability_uuid):
+        return "Error: give exactly one of ability_name or ability_uuid."
+    return await _write(
+        "POST",
+        "/dnd5e/use-item",
+        body={
+            "actorUuid": actor_uuid,
+            "abilityName": ability_name,
+            "abilityUuid": ability_uuid,
+            "targetUuid": target_uuid,
+            "targetName": target_name,
+        },
+    )
+
+
+async def foundry_move_token(
+    x: float,
+    y: float,
+    uuid: str = "",
+    name: str = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene.")] = "",
+    animate: bool = True,
+) -> str:
+    """Move a token to x and y on a scene. Give a token uuid or name."""
+    if bool(uuid) == bool(name):
+        return "Error: give exactly one of uuid or name."
+    return await _write(
+        "POST", "/move-token", body={"x": x, "y": y, "uuid": uuid, "name": name, "sceneId": scene_id, "animate": animate}
+    )
+
+
+WRITE_TOOLS = (
+    foundry_send_chat,
+    foundry_roll,
+    foundry_create,
+    foundry_update,
+    foundry_delete,
+    foundry_switch_scene,
+    foundry_use_item,
+    foundry_move_token,
+)
+
+
+def writes_enabled() -> bool:
+    return os.environ.get("FOUNDRY_ALLOW_WRITES", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def register_write_tools(target: FastMCP | None = None) -> None:
+    """Opt-in. Only offered when FOUNDRY_ALLOW_WRITES is set."""
+    for tool in WRITE_TOOLS:
+        (target or mcp).tool()(tool)
+
+
+if writes_enabled():
+    register_write_tools()
 
 
 def main() -> None:

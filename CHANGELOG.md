@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.09.28.10
+- New: 8 write tools, off unless `FOUNDRY_ALLOW_WRITES` is set.
+- Writes only reach worlds in `FOUNDRY_WRITE_WORLDS` (default `mcp-test`). Checked on every write. Each write is logged.
+- `foundry_delete` needs `confirm=true`. No JavaScript tool.
+- 44 tests pass.
+
 ## 2026.09.28.09
 - Zip code for the install link: `e933d874ae67714b6dee84d2c9a4e44b02a4f1f8`
 - Fix: `foundry_download_folder` saved files with `%20` in their names. It now saves the real name (spaces).

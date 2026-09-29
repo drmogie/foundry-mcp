@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 from typing import Any
 
 import httpx
@@ -15,6 +16,12 @@ MAX_CHARS = 60_000
 
 class RelayError(Exception):
     """A problem talking to the relay, worded so a person can act on it."""
+
+
+def write_allowed_worlds() -> set[str]:
+    """World ids that writes may touch. Default: only the test world."""
+    raw = os.environ.get("FOUNDRY_WRITE_WORLDS", "mcp-test")
+    return {w.strip() for w in raw.split(",") if w.strip()}
 
 
 def _flag(value: bool) -> str:
@@ -38,15 +45,25 @@ class RelayClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _request(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    async def _request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+    ) -> Any:
         if not self.api_key:
             raise RelayError(
                 "No API key. Set FOUNDRY_API_KEY to the key from the relay dashboard."
             )
         clean = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
         try:
-            resp = await self._http.get(
-                f"{self.base_url}{path}", params=clean, headers={"x-api-key": self.api_key}
+            resp = await self._http.request(
+                method,
+                f"{self.base_url}{path}",
+                params=clean,
+                json=body,
+                headers={"x-api-key": self.api_key},
             )
         except httpx.ConnectError as exc:
             raise RelayError(
@@ -106,6 +123,38 @@ class RelayClient:
             elif isinstance(value, (list, dict)):
                 params[key] = json.dumps(value)
         return await self._request(endpoint, params)
+
+    async def check_write_target(self) -> tuple[str, str]:
+        """Return (client_id, world_id) if writing to this world is allowed. Otherwise raise."""
+        client_id = await self.resolve_client_id()
+        data = await self.list_clients()
+        clients = data.get("clients", []) if isinstance(data, dict) else []
+        match = next((c for c in clients if c.get("clientId") == client_id), None)
+        if not match or not match.get("isOnline"):
+            raise RelayError("That world is not online, so nothing was changed.")
+        world = str(match.get("worldId") or "")
+        allowed = write_allowed_worlds()
+        if world not in allowed:
+            raise RelayError(
+                f"Writes are blocked for world '{world}'. Allowed worlds: {', '.join(sorted(allowed))}. "
+                "Nothing was changed. (Set FOUNDRY_WRITE_WORLDS to change this.)"
+            )
+        return client_id, world
+
+    async def write(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        params: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+    ) -> Any:
+        """Send a change to Foundry. Only to an allowed world. Logs each write to stderr."""
+        client_id, world = await self.check_write_target()
+        query = {"clientId": client_id, **(params or {})}
+        clean_body = {k: v for k, v in (body or {}).items() if v is not None and v != ""}
+        print(f"[foundry-mcp] WRITE {method} {endpoint} world={world}", file=sys.stderr, flush=True)
+        return await self._request(endpoint, query, method=method, body=clean_body or None)
 
     async def list_dir(self, path: str, source: str = "data") -> list[dict[str, Any]]:
         """One folder level: a list of {name, path, type} where type is directory or file."""

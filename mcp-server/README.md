@@ -1,10 +1,11 @@
 # Foundry MCP server
 
-Version: 2026.09.28.09
+Version: 2026.09.28.10
 
 Lets Claude read a Foundry VTT world.
 It talks to the ThreeHats relay add-on.
-This version is read-only. Nothing here changes your world.
+By default it is read-only. Nothing changes your world.
+Write tools exist, but they are off until you turn them on. See "Write tools" below.
 
 ## Tools
 
@@ -35,6 +36,28 @@ Set these as environment variables.
 - FOUNDRY_DOWNLOAD_DIR (optional): turns on one extra tool, described below.
 
 Tip: make a scoped key on the relay dashboard with read scopes only.
+
+## Write tools (optional, off by default)
+
+Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eight tools appear:
+
+- foundry_send_chat: post a chat message
+- foundry_roll: roll dice
+- foundry_create: create an actor, item, scene, journal, and so on
+- foundry_update: change fields on one document
+- foundry_delete: delete one document. Needs `confirm=true`
+- foundry_switch_scene: make a scene active
+- foundry_use_item: D&D 5e, make an actor use an item (good for testing mods)
+- foundry_move_token: move a token
+
+Safety rules:
+
+- Writes only work on worlds listed in `FOUNDRY_WRITE_WORLDS`. The default is `mcp-test`.
+- If the connected world is anything else, nothing is sent. This is checked on every write.
+- If two worlds are online and you did not pick one, nothing is sent.
+- Every write is logged to the Claude Desktop MCP log, with the world name.
+- There is no tool that runs JavaScript in Foundry. That is on purpose.
+- Deleting cannot be undone. Back up first.
 
 ## Copy a mod folder to your computer (optional)
 
@@ -98,6 +121,6 @@ The tests use a pretend relay. They do not need Foundry.
 
 ## Next
 
-- Write tools, one at a time, for the test world only.
+- Combat tools: start and end an encounter, next turn.
 - A tool to run your mod checks.
 - Run it as a Home Assistant add-on.

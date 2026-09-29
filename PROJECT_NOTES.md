@@ -62,3 +62,10 @@
 - Copied Ammo Tracker, Battle Director, Scene Director, and Character Popup from the server into Downloads/D&D mods.
 - `/file-system` lists paths URL-encoded (`A%20B.webp`). Ask with the encoded path, save with the decoded name.
 - Running several downloads at once timed out. Run them one at a time.
+
+## 2026-09-28: write tools (2026.09.28.10)
+
+- Eight opt-in write tools. Guard: world allowlist checked against `/clients` on every write (relay's `worldId`), default `mcp-test`.
+- POST/PUT/DELETE send `clientId` in the query and fields in a JSON body. Empty fields are dropped.
+- Not built on purpose: `/execute-js`, user management, file upload.
+- Not yet run against the live relay.
