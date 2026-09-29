@@ -1,0 +1,25 @@
+name: Foundry REST API Relay
+version: "2026.09.28.02"
+slug: foundry_relay
+description: Self-hosted relay that lets tools (and Claude, through an MCP) talk to Foundry VTT.
+url: https://github.com/drmogie/foundry-mcp
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+ports:
+  3010/tcp: 3010
+ports_description:
+  3010/tcp: Relay web page, API, and WebSocket for the Foundry module
+options:
+  log_level: info
+  disable_registration: false
+  per_minute_request_limit: 0
+schema:
+  log_level: list(debug|info|warn|error)
+  admin_email: email?
+  admin_password: password?
+  disable_registration: bool
+  per_minute_request_limit: int(0,)
