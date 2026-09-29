@@ -1,0 +1,166 @@
+import httpx
+import pytest
+
+from foundry_mcp import server
+from foundry_mcp.client import RelayClient, to_text
+
+CLIENTS = {
+    "total": 2,
+    "clients": [
+        {"clientId": "off1", "worldTitle": "Old", "isOnline": False},
+        {"clientId": "on1", "worldTitle": "MCP Test", "isOnline": True},
+    ],
+}
+
+
+def make_client(handler, **kw):
+    transport = httpx.MockTransport(handler)
+    return RelayClient(base_url="http://relay", api_key="k", transport=transport, **kw)
+
+
+@pytest.fixture
+def calls():
+    return []
+
+
+@pytest.fixture
+def use_client(calls, monkeypatch):
+    def install(extra=None, status=200, **kw):
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            assert request.headers["x-api-key"] == "k"
+            if request.url.path == "/clients":
+                return httpx.Response(200, json=CLIENTS)
+            if extra is not None:
+                return httpx.Response(status, json=extra)
+            return httpx.Response(200, json={"ok": True, "path": request.url.path})
+
+        monkeypatch.setattr(server, "_client", make_client(handler, **kw))
+
+    return install
+
+
+async def test_picks_the_online_world(use_client, calls):
+    use_client()
+    out = await server.foundry_world_info()
+    assert '"ok": true' in out
+    assert calls[-1].url.params["clientId"] == "on1"
+
+
+async def test_configured_client_id_skips_lookup(use_client, calls):
+    use_client(client_id="fixed")
+    await server.foundry_world_info()
+    assert [c.url.path for c in calls] == ["/world-info"]
+    assert calls[0].url.params["clientId"] == "fixed"
+
+
+async def test_search_sends_flags_as_text(use_client, calls):
+    use_client(client_id="c")
+    await server.foundry_search(query="goblin", filter="Actor", limit=5)
+    q = calls[-1].url.params
+    assert q["query"] == "goblin" and q["minified"] == "true" and q["limit"] == "5"
+    assert q["excludeCompendiums"] == "false"
+
+
+async def test_actor_details_sends_json_array(use_client, calls):
+    use_client(client_id="c")
+    await server.foundry_actor_details("Actor.a1", ["items", "spells"])
+    assert calls[-1].url.params["details"] == '["items", "spells"]'
+
+
+async def test_scene_needs_exactly_one_choice(use_client):
+    use_client(client_id="c")
+    assert "exactly one" in await server.foundry_get_scene()
+    assert "exactly one" in await server.foundry_get_scene(active=True, all=True)
+
+
+async def test_scene_active_only_sends_active(use_client, calls):
+    use_client(client_id="c")
+    await server.foundry_get_scene(active=True)
+    q = calls[-1].url.params
+    assert q["active"] == "true" and "all" not in q and "sceneId" not in q
+
+
+async def test_bad_key_is_explained(use_client):
+    use_client({"error": "nope"}, status=401, client_id="c")
+    assert "rejected the API key" in await server.foundry_get_rolls()
+
+
+async def test_missing_key(monkeypatch):
+    monkeypatch.delenv("FOUNDRY_API_KEY", raising=False)
+    monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key=""))
+    assert "No API key" in await server.foundry_list_worlds()
+
+
+async def test_no_world_online(monkeypatch):
+    def handler(request):
+        return httpx.Response(200, json={"total": 0, "clients": []})
+
+    monkeypatch.setattr(server, "_client", make_client(handler))
+    assert "No Foundry world is online" in await server.foundry_world_info()
+
+
+async def test_two_worlds_online_asks_for_a_choice(monkeypatch):
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"clients": [{"clientId": "a", "isOnline": True}, {"clientId": "b", "isOnline": True}]},
+        )
+
+    monkeypatch.setattr(server, "_client", make_client(handler))
+    assert "FOUNDRY_CLIENT_ID" in await server.foundry_world_info()
+
+
+async def test_cannot_reach_relay(monkeypatch):
+    def handler(request):
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(server, "_client", make_client(handler, client_id="c"))
+    assert "Cannot reach the relay" in await server.foundry_world_info()
+
+
+def test_long_replies_are_cut():
+    text = to_text({"x": "a" * 100_000})
+    assert "cut off" in text and len(text) < 61_000
+
+
+EXPECTED_TOOLS = {
+    "foundry_list_worlds",
+    "foundry_world_info",
+    "foundry_structure",
+    "foundry_search",
+    "foundry_get",
+    "foundry_actor_details",
+    "foundry_get_scene",
+    "foundry_list_users",
+    "foundry_get_chat",
+    "foundry_get_rolls",
+    "foundry_get_encounters",
+    "foundry_list_macros",
+    "foundry_get_effects",
+    "foundry_list_files",
+}
+
+
+async def test_only_the_expected_read_tools_exist():
+    # Adding a tool (especially one that writes) must be a deliberate change to this list.
+    names = {t.name for t in await server.mcp.list_tools()}
+    assert names == EXPECTED_TOOLS
+
+
+async def test_every_call_is_a_get(use_client, calls):
+    use_client(client_id="c")
+    await server.foundry_world_info()
+    await server.foundry_get_chat()
+    await server.foundry_list_files()
+    assert {c.method for c in calls} == {"GET"}
+
+
+async def test_structure_and_files_pass_a_path_param(use_client, calls):
+    use_client(client_id="c")
+    await server.foundry_structure(path="Actors/Monsters", types="Actor")
+    assert calls[-1].url.path == "/structure"
+    assert calls[-1].url.params["path"] == "Actors/Monsters"
+    await server.foundry_list_files(path="modules/fga-mount-action", source="data")
+    assert calls[-1].url.path == "/file-system"
+    assert calls[-1].url.params["path"] == "modules/fga-mount-action"

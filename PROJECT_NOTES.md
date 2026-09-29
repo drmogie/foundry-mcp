@@ -21,3 +21,12 @@
 - config.yaml now has `image:`, so Home Assistant pulls instead of building.
 - One-time step: after the first workflow run, make the ghcr packages public so HA can pull without a login.
 - The Dockerfile stays as the source of truth.
+
+## 2026-09-28: Phase 3 started (2026.09.28.04)
+
+- Relay is running on ha-pi4 and the MCP Test world connected.
+- `mcp-server/` is a read-only FastMCP server (14 tools) over the relay REST API.
+- 15 tests pass against a pretend relay. Not yet run against the live relay.
+- Reply shapes come from the relay source: `/clients` returns `clients[]` with `clientId` and `isOnline`.
+- Arrays go in the query as JSON text, for example `details`.
+- Write tools are not built yet. Test world only, one at a time.

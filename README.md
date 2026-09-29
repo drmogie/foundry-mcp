@@ -2,12 +2,12 @@
 
 Lets Claude work with a Foundry VTT test world.
 
-Version: 2026.09.28.03
+Version: 2026.09.28.04
 
 ## What is in here
 
 - `foundry-relay/` is a Home Assistant add-on. It runs the ThreeHats Foundry REST API Relay.
-- The MCP server comes later (Phase 3).
+- `mcp-server/` is the Python MCP server. Read-only for now. See its README.
 
 ## Why build from source
 
