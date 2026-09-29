@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.2
+Version: 2026.09.29.3
 
 Foundry module that links one browser to your own FGA Relay.
 
@@ -24,6 +24,10 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.3
+- List folders and read files from Foundry data.
+- 40 tests with a pretend Foundry.
+
 ### 2026.09.29.2
 - Commands for reading and changing the world, rolling, chat, items, tokens and scenes.
 - 33 tests with a pretend Foundry.

@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from . import __version__, auth
@@ -39,6 +40,15 @@ class TokenBody(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     app = FastAPI(title="FGA Relay", version=__version__, docs_url=None, redoc_url=None)
+    @app.exception_handler(RequestValidationError)
+    async def bad_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+        problems = []
+        for err in exc.errors():
+            where = ".".join(str(part) for part in err.get("loc", ()) if part not in ("body", "query", "path"))
+            problems.append(f"{where or 'request'}: {err.get('msg', 'not valid')}")
+        hint = " If you sent JSON from Windows, check the quote marks. PowerShell's ConvertTo-Json is the safe way."
+        return JSONResponse(status_code=422, content={"detail": "Bad request. " + "; ".join(problems) + "." + hint})
+
     secret = session_secret(settings)
     hub = Hub()
     limiter = auth.LoginLimiter()

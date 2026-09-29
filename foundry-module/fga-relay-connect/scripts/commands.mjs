@@ -11,6 +11,29 @@ export const ALLOWED = [
 
 const COLLECTIONS = ["Actor", "Item", "Scene", "JournalEntry", "Macro", "RollTable", "Playlist", "Folder", "Combat"];
 
+
+const FILE_SOURCES = ["data", "public"];
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
+
+/** Refuse paths that climb out of the folder or point somewhere else. */
+export function cleanPath(path, allowEmpty = false) {
+  const text = String(path ?? "");
+  let decoded = text;
+  try { decoded = decodeURIComponent(text); } catch { /* keep the raw text */ }
+  if (!text && allowEmpty) return text;
+  if (!text) throw new Error("path is required");
+  if (decoded.split(/[\\/]/).includes("..") || decoded.startsWith("/") || decoded.startsWith("\\") || /^[a-z][a-z0-9+.-]*:/i.test(decoded)) {
+    throw new Error("That path is not allowed. Use a path inside the Foundry Data folder, like modules/my-module/module.json.");
+  }
+  return text;
+}
+
+function toBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
 const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
 
 function need(value, name) {
@@ -182,9 +205,10 @@ export function makeCommands(ctx) {
       };
     },
 
-    async sendChat({ content, actorId, alias, whisper } = {}) {
+    async sendChat({ content, actorId, alias, whisper, flavor } = {}) {
       need(content, "content");
       const data = { content: String(content) };
+      if (flavor) data.flavor = String(flavor);
       if (actorId) {
         const actor = game.actors.get(actorId);
         if (!actor) throw new Error(`No actor with id ${actorId}`);
@@ -259,6 +283,33 @@ export function makeCommands(ctx) {
       if (activate) await scene.activate();
       else await scene.view();
       return { ...brief(scene), activated: !!activate };
+    },
+
+    async listFiles({ path, source } = {}) {
+      const where = source ?? "data";
+      if (!FILE_SOURCES.includes(where)) throw new Error(`Cannot browse ${where}. Try one of: ${FILE_SOURCES.join(", ")}.`);
+      cleanPath(path ?? "", true);
+      const result = await ctx.FilePicker.browse(where, path ?? "");
+      return { path: result.target ?? path ?? "", source: where, dirs: result.dirs ?? [], files: result.files ?? [] };
+    },
+
+    async readFile({ path, source } = {}) {
+      need(path, "path");
+      const where = source ?? "data";
+      if (!FILE_SOURCES.includes(where)) throw new Error(`Cannot read from ${where}. Try one of: ${FILE_SOURCES.join(", ")}.`);
+      cleanPath(path);
+      const response = await ctx.fetch(ctx.getRoute(path));
+      if (!response.ok) throw new Error(`Could not read ${path} (status ${response.status}).`);
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > MAX_FILE_BYTES) {
+        throw new Error(`${path} is ${buffer.byteLength} bytes. The limit is ${MAX_FILE_BYTES}.`);
+      }
+      return {
+        path,
+        size: buffer.byteLength,
+        mimeType: response.headers?.get?.("content-type") ?? "application/octet-stream",
+        base64: toBase64(new Uint8Array(buffer))
+      };
     }
   };
 

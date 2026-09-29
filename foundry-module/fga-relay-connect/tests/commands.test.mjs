@@ -258,3 +258,69 @@ test("useItem can run one activity, and complains about a missing one", async ()
   assert.equal(ran, 1);
   await assert.rejects(c.useItem({ uuid: "Item.i1", activityId: "nope" }), /No activity nope/);
 });
+
+// ----- files and chat flavor -----
+
+function withFiles(overrides = {}) {
+  const w = fakeWorld();
+  w.FilePicker = { browse: async (source, path) => ({ target: path, dirs: [`${path}/scripts`], files: [`${path}/module.json`] }) };
+  w.fetch = async (url) => ({
+    ok: true, status: 200,
+    headers: { get: () => "application/json" },
+    arrayBuffer: async () => new TextEncoder().encode(`{"url":"${url}"}`).buffer
+  });
+  w.getRoute = (p) => `/${p}`;
+  Object.assign(w, overrides);
+  return { w, c: makeCommands(w) };
+}
+
+test("listFiles browses a folder", async () => {
+  const { c } = withFiles();
+  const r = await c.listFiles({ path: "modules/fga" });
+  assert.deepEqual(r.dirs, ["modules/fga/scripts"]);
+  assert.deepEqual(r.files, ["modules/fga/module.json"]);
+  assert.equal((await c.listFiles({})).source, "data");
+});
+
+test("listFiles refuses odd sources and paths", async () => {
+  const { c } = withFiles();
+  await assert.rejects(c.listFiles({ source: "s3-secret" }), /Cannot browse/);
+  await assert.rejects(c.listFiles({ path: "../Config" }), /not allowed/);
+  await assert.rejects(c.listFiles({ path: "modules/%2e%2e/x".replace("%2e%2e", "..") }), /not allowed/);
+});
+
+test("readFile returns base64 with size and type", async () => {
+  const { c } = withFiles();
+  const r = await c.readFile({ path: "modules/fga/module.json" });
+  assert.equal(Buffer.from(r.base64, "base64").toString(), '{"url":"/modules/fga/module.json"}');
+  assert.equal(r.mimeType, "application/json");
+  assert.equal(r.size, Buffer.from(r.base64, "base64").length);
+});
+
+test("readFile refuses climbing out, absolute paths, and other schemes", async () => {
+  const { c } = withFiles();
+  for (const bad of ["../secret.txt", "modules/../../x", "/etc/passwd", "https://evil.example/x", "file:///x", "modules%2F..%2F..%2Fx"]) {
+    await assert.rejects(c.readFile({ path: bad }), /not allowed/, bad);
+  }
+  await assert.rejects(c.readFile({}), /path is required/);
+});
+
+test("readFile reports missing files and size limits", async () => {
+  const missing = withFiles({ fetch: async () => ({ ok: false, status: 404 }) });
+  await assert.rejects(missing.c.readFile({ path: "modules/x.js" }), /status 404/);
+  const big = withFiles({ fetch: async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(9 * 1024 * 1024) }) });
+  await assert.rejects(big.c.readFile({ path: "modules/big.bin" }), /limit/);
+});
+
+test("readFile handles files larger than one chunk", async () => {
+  const bytes = new Uint8Array(100000).map((_, i) => i % 251);
+  const { c } = withFiles({ fetch: async () => ({ ok: true, status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => bytes.buffer }) });
+  const r = await c.readFile({ path: "modules/a.png" });
+  assert.deepEqual(new Uint8Array(Buffer.from(r.base64, "base64")), bytes);
+});
+
+test("sendChat passes flavor through", async () => {
+  const { w, c } = setup();
+  await c.sendChat({ content: "Hi", flavor: "Test" });
+  assert.equal(w.log.find((l) => l[0] === "chat")[1].flavor, "Test");
+});

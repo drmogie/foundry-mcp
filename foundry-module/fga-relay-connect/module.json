@@ -2,7 +2,7 @@
   "id": "fga-relay-connect",
   "title": "FGA Relay Connect",
   "description": "Connects this Foundry client to your own FGA Relay so tools and Claude can work with your world.",
-  "version": "2026.09.29.2",
+  "version": "2026.09.29.3",
   "authors": [{ "name": "DrMogie" }],
   "compatibility": { "minimum": "13", "verified": "14" },
   "esmodules": ["scripts/main.mjs"],

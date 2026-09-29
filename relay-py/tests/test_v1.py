@@ -284,3 +284,39 @@ async def test_two_clients_need_a_client_id(relay):
             assert r.status_code == 200 and r.json()["clientId"] == "second-world:1"
             assert [k for k, _ in b.seen] == ["world"] and a.seen == []
     await api.aclose(); await web.aclose()
+
+
+# ----- files, flavor, and friendly errors -----
+
+@pytest.mark.asyncio
+async def test_file_routes_send_the_right_command(relay):
+    web, key, api = await setup(relay, name="r", scope="read")
+    async with Foundry(relay, key) as f:
+        assert (await api.get("/api/v1/files", params={"path": "modules/fga"})).status_code == 200
+        assert (await api.get("/api/v1/file", params={"path": "modules/fga/module.json"})).status_code == 200
+        assert f.seen == [
+            ("listFiles", {"path": "modules/fga", "source": "data"}),
+            ("readFile", {"path": "modules/fga/module.json", "source": "data"}),
+        ]
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chat_flavor_is_passed(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    async with Foundry(relay, key) as f:
+        await api.post("/api/v1/chat", json={"content": "hi", "flavor": "Test"})
+        assert f.seen == [("sendChat", {"content": "hi", "flavor": "Test"})]
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_bad_body_gets_plain_words(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    r = await api.post("/api/v1/chat", content=b"{not json", headers={"content-type": "application/json"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert isinstance(detail, str) and detail.startswith("Bad request.") and "quote marks" in detail
+    r = await api.post("/api/v1/chat", json={"alias": "x"})
+    assert r.status_code == 422 and "content" in r.json()["detail"]
+    await api.aclose(); await web.aclose()

@@ -26,6 +26,7 @@ class CreateBody(BaseModel):
 
 class ChatBody(BaseModel):
     content: str
+    flavor: str | None = None
     actorId: str | None = None
     alias: str | None = None
     whisper: list[str] | None = None
@@ -125,6 +126,14 @@ def register_v1(
     @app.get("/api/v1/users")
     async def users(request: Request, client_id: str | None = None):
         return await run(request, "users", client_id=client_id)
+
+    @app.get("/api/v1/files")
+    async def list_files(request: Request, path: str = "", source: str = "data", client_id: str | None = None):
+        return await run(request, "listFiles", {"path": path, "source": source}, client_id=client_id)
+
+    @app.get("/api/v1/file")
+    async def read_file(request: Request, path: str, source: str = "data", client_id: str | None = None):
+        return await run(request, "readFile", {"path": path, "source": source}, client_id=client_id)
 
     # ----- write -----
 

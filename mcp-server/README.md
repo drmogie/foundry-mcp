@@ -37,6 +37,18 @@ Set these as environment variables.
 
 Tip: make a scoped key on the relay dashboard with read scopes only.
 
+## Use our own relay (FGA relay)
+
+The same tools work with our own relay. Nothing else changes.
+
+- Make a token on the relay web page. It starts with `fgat_`.
+- Set FOUNDRY_API_KEY to that token.
+- Set FOUNDRY_RELAY_URL if not `https://rest-relay.mogie.io`.
+- The token type is picked for you. To force it, set FOUNDRY_RELAY_KIND to `fga` or `threehats`.
+- Writes use the same switch and world limit as before.
+- The relay also limits writes. Use a write token.
+- ThreeHats stays as a backup. Change the key back to switch.
+
 ## Write tools (optional, off by default)
 
 Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eight tools appear:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.09.29.4
+- Files: list folders and read files through Foundry (routes /files and /file).
+- Plain-words messages when a request has a mistake (422).
+- Works with the MCP server. Same tool names as before.
+- Needs FGA Relay Connect 2026.09.29.3 in Foundry.
+- Tests: 52 relay tests.
+
 ## 2026.09.29.3
 - The real REST routes. Read: world, documents list, one document, chat, encounters, effects, scene, users.
 - Write: update, create, delete (needs confirm=true), chat, rolls, use item, move token, switch scene.

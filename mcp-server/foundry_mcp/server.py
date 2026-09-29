@@ -1,4 +1,4 @@
-"""Foundry MCP server. Read-only tools for a Foundry VTT world via the ThreeHats relay."""
+"""Foundry MCP server. Tools for a Foundry VTT world via our own FGA relay or the ThreeHats relay."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pydantic import Field
 
 from . import __version__
 from .client import RelayClient, RelayError, to_text
+from .fga import FgaClient
 
 INSTRUCTIONS = (
     "Access to a Foundry VTT world through a self-hosted relay. Read-only unless writes were turned on. "
@@ -25,10 +26,19 @@ mcp = FastMCP("foundry-mcp", instructions=INSTRUCTIONS)
 _client: RelayClient | None = None
 
 
+def make_client() -> RelayClient:
+    """Our own FGA relay when the key is one of its tokens (fgat_...) or FOUNDRY_RELAY_KIND=fga. Else ThreeHats."""
+    kind = os.environ.get("FOUNDRY_RELAY_KIND", "").strip().lower()
+    key = os.environ.get("FOUNDRY_API_KEY", "")
+    if kind == "fga" or (kind != "threehats" and key.startswith("fgat_")):
+        return FgaClient()
+    return RelayClient()
+
+
 def client() -> RelayClient:
     global _client
     if _client is None:
-        _client = RelayClient()
+        _client = make_client()
     return _client
 
 

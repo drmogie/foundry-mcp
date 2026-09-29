@@ -77,7 +77,12 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  commands = makeCommands({ game, fromUuid, Roll, ChatMessage, CONFIG });
+  commands = makeCommands({
+    game, fromUuid, Roll, ChatMessage, CONFIG,
+    FilePicker: foundry.applications.apps.FilePicker.implementation,
+    fetch: (url) => fetch(url),
+    getRoute: (path) => foundry.utils.getRoute(path)
+  });
   game.modules.get(ID).api.commands = commands;
   link = new RelayLink({
     getSettings: () => ({ url: game.settings.get(ID, "url"), key: game.settings.get(ID, "key") }),

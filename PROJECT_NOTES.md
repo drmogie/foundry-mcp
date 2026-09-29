@@ -99,3 +99,15 @@
 - 49 relay tests (a pretend Foundry client on a real socket).
 - Not yet run against real Foundry. Needs the new module copied into Foundry, then try the routes from the PC.
 - Next: point mcp-server at our relay, compare with ThreeHats, then Stage 4 (combat control, apply damage, activity log).
+
+## 2026-09-29: MCP client for our relay (mcp-server 2026.09.29.1, relay .4, module .3)
+
+- New `foundry_mcp/fga.py`: FgaClient turns the old ThreeHats-style calls into our /api/v1 routes. Tool names do not change.
+- Picked by token: a key starting `fgat_` uses FgaClient. `FOUNDRY_RELAY_KIND` forces it.
+- Default address `https://rest-relay.mogie.io` (LAN only).
+- Update with items or effects becomes creates on the parent, then one patch for the rest.
+- Use item and move token can find things by name.
+- Relay .4 adds file routes. Module .3 adds file commands.
+- 73 mcp-server tests, 52 relay tests, 40 module tests.
+- Switch: set FOUNDRY_API_KEY to an fgat_ token. ThreeHats stays as backup.
+- Next: try it live on ha-pi4, then Stage 4.
