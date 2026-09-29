@@ -1,5 +1,7 @@
 # Foundry REST API Relay (ThreeHats), built from source so it runs on ARM.
 # The official Docker image is Intel-only, so we compile it here.
+# GitHub Actions builds this file and publishes the image to ghcr.io.
+# Home Assistant then pulls that image, so the Pi never has to compile.
 ARG RELAY_REF=3.4.1
 
 # Stage 1: Go relay server

@@ -1,6 +1,7 @@
 name: Foundry REST API Relay
-version: "2026.09.28.02"
+version: "2026.09.28.03"
 slug: foundry_relay
+image: ghcr.io/drmogie/{arch}-addon-foundry-relay
 description: Self-hosted relay that lets tools (and Claude, through an MCP) talk to Foundry VTT.
 url: https://github.com/drmogie/foundry-mcp
 arch:

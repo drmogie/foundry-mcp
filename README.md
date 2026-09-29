@@ -2,7 +2,7 @@
 
 Lets Claude work with a Foundry VTT test world.
 
-Version: 2026.09.28.02
+Version: 2026.09.28.03
 
 ## What is in here
 
@@ -14,7 +14,12 @@ Version: 2026.09.28.02
 The official relay Docker image only runs on Intel chips.
 ha-pi4 and ha-blue are ARM.
 This add-on builds the relay from source, so it works on both.
-The first install takes a while. That is normal.
+GitHub Actions does the building, not your Pi.
+It publishes the ready image to ghcr.io.
+Home Assistant just downloads it.
+
+After the first build, open the package pages on GitHub and set them to Public.
+There is one for `aarch64-addon-foundry-relay` and one for `amd64-addon-foundry-relay`.
 
 ## Phase 1. Test world (on vtt.mogie.io)
 

@@ -13,3 +13,11 @@
   published the repo.
 - The add-on is NOT tested end to end. The first build on ARM is slow.
 - Repo is an add-on store, so no hacs.json.
+
+## 2026-09-28: prebuilt image (2026.09.28.03)
+
+- The first build on ha-pi4 ran 25+ minutes and choked the Pi (health checks failing, network flapping).
+- Fix: GitHub Actions builds the image for aarch64 and amd64 and pushes it to ghcr.io.
+- config.yaml now has `image:`, so Home Assistant pulls instead of building.
+- One-time step: after the first workflow run, make the ghcr packages public so HA can pull without a login.
+- The Dockerfile stays as the source of truth.
