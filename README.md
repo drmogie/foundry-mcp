@@ -83,3 +83,10 @@ Back up the add-on to keep your accounts and keys.
 
 - Relay version: 3.4.1. To change it, edit `RELAY_REF` in the Dockerfile.
 - This is an add-on repository, so it does not use HACS.
+
+## Our own relay (in progress)
+
+`relay-py/` is our own relay add-on (FGA Relay, Python), and
+`foundry-module/fga-relay-connect/` is the Foundry module that links to it.
+It runs on port 3011, next to the ThreeHats relay on 3010.
+See `relay-py/README.md`.

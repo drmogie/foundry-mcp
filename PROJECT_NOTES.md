@@ -69,3 +69,14 @@
 - POST/PUT/DELETE send `clientId` in the query and fields in a JSON body. Empty fields are dropped.
 - Not built on purpose: `/execute-js`, user management, file upload.
 - Not yet run against the live relay.
+
+## 2026-09-29: our own relay, Stage 1 (2026.09.29.1)
+
+- Why: ThreeHats setup was rough (confusing login page, module pointed at the public server, slow to link with no status).
+- Decision: Python. Same language as the MCP server.
+- Built `relay-py/` (FastAPI): one login from add-on options, status lights, connect key, "Test the link" ping, live socket to the module. Port 3011.
+- Built `foundry-module/fga-relay-connect/`: settings, auto reconnect, hello, ping.
+- Tests: 17 relay tests (including live socket tests) and 11 module tests. Also ran the real module code against a running relay: link, ping in 2 ms, wrong key stops retrying.
+- Not done yet: Docker image build (no Docker daemon here; GitHub Actions workflow added), install on ha-pi4, real Foundry test.
+- Next: Stage 2 tokens, Stage 3 REST routes, then point the MCP server at it.
+- Lesson: test the socket with a real server, not a threaded TestClient (it hangs).

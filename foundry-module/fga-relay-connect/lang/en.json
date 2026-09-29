@@ -1,0 +1,24 @@
+{
+  "FGA_RELAY": {
+    "Url": {
+      "Name": "Relay address",
+      "Hint": "Copy this from the relay web page. It starts with ws:// or wss://. If Foundry uses https, the address must start with wss://."
+    },
+    "Key": {
+      "Name": "Connect key",
+      "Hint": "Copy this from the relay web page."
+    },
+    "Enabled": {
+      "Name": "Connect this browser to the relay",
+      "Hint": "Turn on for one dedicated GM browser tab. Leave off for players."
+    },
+    "Status": {
+      "Connected": "FGA Relay: connected",
+      "Connecting": "FGA Relay: connecting...",
+      "Off": "FGA Relay: off",
+      "NoSettings": "FGA Relay: set the relay address and connect key in module settings.",
+      "BadKey": "FGA Relay: the relay rejected the connect key. Copy it again from the relay page.",
+      "Replaced": "FGA Relay: another browser took over the link."
+    }
+  }
+}
