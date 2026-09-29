@@ -79,7 +79,7 @@ It does not change Foundry. It only copies files out.
 claude mcp add foundry \
   --env FOUNDRY_API_KEY=YOUR_KEY \
   --env FOUNDRY_RELAY_URL=http://ha-pi4:3010 \
-  -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/e933d874ae67714b6dee84d2c9a4e44b02a4f1f8.zip#subdirectory=mcp-server" foundry-mcp
+  -- uvx --from "https://github.com/drmogie/foundry-mcp/archive/77b29bbf812b6a8035f53969e504774972c0880e.zip#subdirectory=mcp-server" foundry-mcp
 ```
 
 ## Add it to Claude Desktop
@@ -89,7 +89,7 @@ Open the config file and add this under `mcpServers`:
 ```json
 "foundry": {
   "command": "uvx",
-  "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/e933d874ae67714b6dee84d2c9a4e44b02a4f1f8.zip#subdirectory=mcp-server", "foundry-mcp"],
+  "args": ["--from", "https://github.com/drmogie/foundry-mcp/archive/77b29bbf812b6a8035f53969e504774972c0880e.zip#subdirectory=mcp-server", "foundry-mcp"],
   "env": {
     "FOUNDRY_API_KEY": "YOUR_KEY",
     "FOUNDRY_RELAY_URL": "http://ha-pi4:3010"
