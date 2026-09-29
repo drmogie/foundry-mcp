@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.6
+Version: 2026.09.29.7
 
 Foundry module that links one browser to your own FGA Relay.
 
@@ -24,6 +24,14 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.7
+- Conditions: list, add, remove, toggle.
+- Death saves, saving throws, ability checks and skill checks, with advantage and an optional DC.
+- Spell slots, item charges and consumable counts: read, spend, restore, set.
+- Last attack: attacker, weapon, roll, hit or miss, target, armor class and damage in one answer.
+- Targets, tokens (create, show or hide, rotate), journals and pages, rollable tables.
+- Compendiums: list, search, import an actor or item, optionally place the token.
+
 ### 2026.09.29.6
 - Short rest can spend hit dice. Biggest die first, adds Con, stops at full hit points, and tracks the used dice on the class.
 

@@ -480,6 +480,65 @@ async def foundry_rest(
 
 
 @mcp.tool()
+async def foundry_get_conditions(
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Conditions on an actor or token, like prone or poisoned. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/conditions", uuid=uuid, name=name, sceneId=scene_id)
+
+
+@mcp.tool()
+async def foundry_get_resources(
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Spell slots, items with limited uses, and consumable counts (like arrows). Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/resources", uuid=uuid, name=name, sceneId=scene_id)
+
+
+@mcp.tool()
+async def foundry_last_attack(
+    alias: Annotated[str, Field(description="Only attacks by this speaker, like Bob.")] = "",
+    limit: Annotated[int, Field(ge=10, le=200, description="How many recent chat messages to look through.")] = 60,
+) -> str:
+    """The latest attack in chat in one answer: attacker, weapon, roll, hit or miss, target, armor class and the damage roll.
+    If pending is true, the attack hit but the damage has not been rolled yet, so ask again in a few seconds. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/last-attack", alias=alias, limit=limit)
+
+
+@mcp.tool()
+async def foundry_list_packs(
+    type: Annotated[str, Field(description="Actor, Item, JournalEntry, RollTable, Scene and so on. Empty for all.")] = "",
+    q: Annotated[str, Field(description="Part of the compendium name.")] = "",
+) -> str:
+    """Compendiums (packs) in the world. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/packs", type=type, q=q)
+
+
+@mcp.tool()
+async def foundry_search_pack(
+    pack: Annotated[str, Field(description='Compendium id from foundry_list_packs, like "dnd5e.monsters".')],
+    q: Annotated[str, Field(description="Part of the name.")] = "",
+    limit: Annotated[int, Field(ge=1, le=200)] = 25,
+) -> str:
+    """Find entries in one compendium. Each result has an id for foundry_import_from_pack. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/pack-index", pack=pack, q=q, limit=limit)
+
+
+@mcp.tool()
 async def foundry_activity_log(
     limit: Annotated[int, Field(ge=1, le=500)] = 20,
     token: Annotated[str, Field(description="Only this API token's name.")] = "",
@@ -489,6 +548,172 @@ async def foundry_activity_log(
     if (problem := _needs_fga()) is not None:
         return problem
     return await _run("/activity", limit=limit, token=token, kind=kind)
+
+
+_WHO = "Give exactly one of uuid or name."
+
+
+def _one_of(uuid: str, name: str) -> str | None:
+    return None if bool(uuid) != bool(name) else f"Error: {_WHO}"
+
+
+async def foundry_condition(
+    condition: Annotated[str, Field(description='A condition id or name, like "prone" or "Poisoned".')],
+    state: Annotated[str, Field(description="add, remove or toggle.")] = "add",
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Add, remove or toggle a condition on an actor or token. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if (bad := _one_of(uuid, name)) is not None:
+        return bad
+    return await _write("POST", "/conditions", body={"uuid": uuid, "name": name, "sceneId": scene_id, "condition": condition, "state": state})
+
+
+async def foundry_death_save(
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Roll a death saving throw with D&D 5e rules. Posts to chat and updates the successes and failures. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if (bad := _one_of(uuid, name)) is not None:
+        return bad
+    return await _write("POST", "/death-save", body={"uuid": uuid, "name": name, "sceneId": scene_id})
+
+
+async def foundry_check(
+    key: Annotated[str, Field(description='Ability like "dex" or "Dexterity", or skill like "ath" or "Athletics".')],
+    kind: Annotated[str, Field(description="save, ability or skill.")] = "ability",
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+    dc: Annotated[float | None, Field(description="Difficulty. The answer then says success or not.")] = None,
+    advantage: bool = False,
+    disadvantage: bool = False,
+) -> str:
+    """Roll a saving throw, ability check or skill check with the actor's real bonuses. Posts to chat. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if (bad := _one_of(uuid, name)) is not None:
+        return bad
+    return await _write("POST", "/check", body={
+        "uuid": uuid, "name": name, "sceneId": scene_id, "kind": kind, "key": key, "dc": dc,
+        "advantage": advantage or None, "disadvantage": disadvantage or None})
+
+
+async def foundry_spend_resource(
+    target: Annotated[str, Field(description="slot (spell slot), uses (item charges) or quantity (like arrows).")] = "slot",
+    level: Annotated[str, Field(description='For slots: 1 to 9, or "pact".')] = "",
+    item_uuid: Annotated[str, Field(description="For uses and quantity: the item uuid.")] = "",
+    mode: Annotated[str, Field(description="spend, restore or set.")] = "spend",
+    amount: Annotated[int, Field(ge=0, le=1000)] = 1,
+    uuid: Annotated[str, Field(description="For slots: actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="For slots: token name on the scene.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Spend, restore or set a spell slot, an item's charges, or an item's quantity. Refuses to go below zero. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if target == "slot" and (bad := _one_of(uuid, name)) is not None:
+        return bad
+    return await _write("POST", "/resources", body={
+        "uuid": uuid, "name": name, "sceneId": scene_id, "target": target, "level": level or None,
+        "itemUuid": item_uuid, "mode": mode, "amount": amount})
+
+
+async def foundry_target(
+    names: Annotated[list[str] | None, Field(description="Token names on the scene to target.")] = None,
+    uuids: Annotated[list[str] | None, Field(description="Token uuids to target.")] = None,
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with names.")] = "",
+) -> str:
+    """Set the GM's targets on the canvas. Give nothing to clear all targets. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/target", body={"names": names, "uuids": uuids, "sceneId": scene_id})
+
+
+async def foundry_add_token(
+    actor_uuid: Annotated[str, Field(description="Actor uuid to make a token from.")],
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+    x: Annotated[float | None, Field(description="Position in pixels.")] = None,
+    y: Annotated[float | None, Field(description="Position in pixels.")] = None,
+    hidden: bool = False,
+    token_name: Annotated[str, Field(description="Give the token a different name.")] = "",
+) -> str:
+    """Put an actor on a scene as a token. Needs the FGA relay. To remove a token, use foundry_delete."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/tokens/create", body={
+        "actorUuid": actor_uuid, "sceneId": scene_id, "x": x, "y": y, "hidden": hidden or None, "tokenName": token_name})
+
+
+async def foundry_set_token(
+    uuid: Annotated[str, Field(description="Token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+    hidden: Annotated[bool | None, Field(description="true hides it from players. false shows it.")] = None,
+    rotation: float | None = None,
+    elevation: float | None = None,
+    x: float | None = None,
+    y: float | None = None,
+) -> str:
+    """Show or hide a token, or change its rotation, elevation or position. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if (bad := _one_of(uuid, name)) is not None:
+        return bad
+    return await _write("PATCH", "/tokens/set", body={
+        "uuid": uuid, "name": name, "sceneId": scene_id, "hidden": hidden, "rotation": rotation,
+        "elevation": elevation, "x": x, "y": y})
+
+
+async def foundry_create_journal(
+    name: Annotated[str, Field(description="Journal name. With uuid, the name of the new page.")] = "",
+    content: Annotated[str, Field(description="Page text. HTML is allowed.")] = "",
+    pages: Annotated[list[dict] | None, Field(description='Several pages: [{"name": "...", "text": "..."}].')] = None,
+    folder: Annotated[str, Field(description="Folder id.")] = "",
+    uuid: Annotated[str, Field(description="Add pages to this existing journal instead of making a new one.")] = "",
+) -> str:
+    """Make a journal entry with text pages, or add pages to one. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/journals", body={"uuid": uuid, "name": name, "content": content, "pages": pages, "folder": folder})
+
+
+async def foundry_roll_table(
+    name: Annotated[str, Field(description="Table name.")] = "",
+    uuid: Annotated[str, Field(description="Table uuid, if you have it.")] = "",
+    post_to_chat: bool = True,
+) -> str:
+    """Roll on a rollable table. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if not (uuid or name):
+        return "Error: give the table name or uuid."
+    return await _write("POST", "/tables/roll", body={"uuid": uuid, "name": name, "chat": post_to_chat})
+
+
+async def foundry_import_from_pack(
+    pack: Annotated[str, Field(description='Compendium id, like "dnd5e.monsters".')],
+    id: Annotated[str, Field(description="Entry id from foundry_search_pack.")],
+    name: Annotated[str, Field(description="Rename the copy.")] = "",
+    folder: Annotated[str, Field(description="Folder id for the copy.")] = "",
+    place: Annotated[bool, Field(description="Actors only: also put a token on the scene.")] = False,
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+    x: float | None = None,
+    y: float | None = None,
+    hidden: bool = False,
+) -> str:
+    """Copy a compendium entry into the world, like a monster. Can place its token. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/compendium/import", body={
+        "pack": pack, "id": id, "name": name, "folder": folder, "place": place or None,
+        "sceneId": scene_id, "x": x, "y": y, "hidden": hidden or None})
 
 
 WRITE_TOOLS = (
@@ -504,6 +729,16 @@ WRITE_TOOLS = (
     foundry_combat_turn,
     foundry_apply_damage,
     foundry_rest,
+    foundry_condition,
+    foundry_death_save,
+    foundry_check,
+    foundry_spend_resource,
+    foundry_target,
+    foundry_add_token,
+    foundry_set_token,
+    foundry_create_journal,
+    foundry_roll_table,
+    foundry_import_from_pack,
 )
 
 

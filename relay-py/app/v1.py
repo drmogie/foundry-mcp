@@ -16,6 +16,10 @@ from .tokens import Token
 COMBAT_ACTIONS = ("start", "nextTurn", "previousTurn", "nextRound", "previousRound", "rollAll", "rollNpc", "end")
 DAMAGE_MODES = ("damage", "heal", "temp")
 REST_TYPES = ("long", "short")
+CONDITION_STATES = ("add", "remove", "toggle")
+CHECK_KINDS = ("save", "ability", "skill")
+RESOURCE_TARGETS = ("slot", "uses", "quantity")
+RESOURCE_MODES = ("spend", "restore", "set")
 
 
 class UpdateBody(BaseModel):
@@ -82,6 +86,87 @@ class RestBody(BaseModel):
     uuid: str
     type: str = "long"
     hitDice: int | None = None
+
+
+class ConditionBody(BaseModel):
+    uuid: str
+    condition: str
+    state: str = "add"
+
+
+class DeathSaveBody(BaseModel):
+    uuid: str
+
+
+class CheckBody(BaseModel):
+    uuid: str
+    kind: str = "ability"
+    key: str
+    dc: float | None = None
+    advantage: bool = False
+    disadvantage: bool = False
+
+
+class ResourceBody(BaseModel):
+    uuid: str | None = None
+    target: str = "slot"
+    level: str | int | None = None
+    itemUuid: str | None = None
+    mode: str = "spend"
+    amount: int = 1
+
+
+class TargetBody(BaseModel):
+    uuids: list[str] = []
+
+
+class TokenCreateBody(BaseModel):
+    actorUuid: str
+    sceneId: str | None = None
+    x: float | None = None
+    y: float | None = None
+    hidden: bool = False
+    name: str | None = None
+
+
+class TokenSetBody(BaseModel):
+    uuid: str
+    hidden: bool | None = None
+    rotation: float | None = None
+    elevation: float | None = None
+    x: float | None = None
+    y: float | None = None
+
+
+class JournalPage(BaseModel):
+    name: str | None = None
+    text: str = ""
+
+
+class JournalBody(BaseModel):
+    uuid: str | None = None
+    name: str | None = None
+    content: str | None = None
+    pages: list[JournalPage] | None = None
+    folder: str | None = None
+
+
+class TableRollBody(BaseModel):
+    uuid: str | None = None
+    name: str | None = None
+    chat: bool = True
+
+
+class ImportBody(BaseModel):
+    pack: str
+    id: str
+    name: str | None = None
+    folder: str | None = None
+    place: bool = False
+    sceneId: str | None = None
+    x: float | None = None
+    y: float | None = None
+    hidden: bool = False
 
 
 class SceneSwitchBody(BaseModel):
@@ -175,6 +260,26 @@ def register_v1(
     async def users(request: Request, client_id: str | None = None):
         return await run(request, "users", client_id=client_id)
 
+    @app.get("/api/v1/conditions")
+    async def conditions(request: Request, uuid: str, client_id: str | None = None):
+        return await run(request, "conditions", {"uuid": uuid}, client_id=client_id)
+
+    @app.get("/api/v1/resources")
+    async def resources(request: Request, uuid: str, client_id: str | None = None):
+        return await run(request, "resources", {"uuid": uuid}, client_id=client_id)
+
+    @app.get("/api/v1/last-attack")
+    async def last_attack(request: Request, alias: str | None = None, limit: int | None = None, client_id: str | None = None):
+        return await run(request, "lastAttack", {"alias": alias, "limit": limit}, client_id=client_id)
+
+    @app.get("/api/v1/packs")
+    async def packs(request: Request, type: str | None = None, q: str | None = None, client_id: str | None = None):
+        return await run(request, "packs", {"type": type, "q": q}, client_id=client_id)
+
+    @app.get("/api/v1/pack-index")
+    async def pack_index(request: Request, pack: str, q: str | None = None, limit: int | None = None, client_id: str | None = None):
+        return await run(request, "packIndex", {"pack": pack, "q": q, "limit": limit}, client_id=client_id)
+
     @app.get("/api/v1/activity")
     async def get_activity(request: Request, limit: int = 50, token: str | None = None, kind: str | None = None):
         api_token(request, "read")
@@ -264,3 +369,71 @@ def register_v1(
             if body.hitDice > 0 and body.type != "short":
                 raise HTTPException(status_code=400, detail="Hit dice are only spent on a short rest.")
         return await run(request, "rest", body.model_dump(exclude_none=True), write=True, client_id=client_id)
+
+    # ----- conditions, checks, resources, tokens, journals, compendiums -----
+
+    @app.post("/api/v1/conditions")
+    async def set_condition(body: ConditionBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if body.state not in CONDITION_STATES:
+            raise HTTPException(status_code=400, detail=f"Unknown state {body.state}. Use one of: {', '.join(CONDITION_STATES)}.")
+        return await run(request, "condition", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/death-save")
+    async def death_save(body: DeathSaveBody, request: Request, client_id: str | None = None):
+        return await run(request, "deathSave", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/check")
+    async def check(body: CheckBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if body.kind not in CHECK_KINDS:
+            raise HTTPException(status_code=400, detail=f"Unknown kind {body.kind}. Use one of: {', '.join(CHECK_KINDS)}.")
+        if body.advantage and body.disadvantage:
+            raise HTTPException(status_code=400, detail="Pick advantage or disadvantage, not both.")
+        return await run(request, "check", body.model_dump(exclude_none=True), write=True, client_id=client_id)
+
+    @app.post("/api/v1/resources")
+    async def spend_resource(body: ResourceBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if body.target not in RESOURCE_TARGETS:
+            raise HTTPException(status_code=400, detail=f"Unknown target {body.target}. Use one of: {', '.join(RESOURCE_TARGETS)}.")
+        if body.mode not in RESOURCE_MODES:
+            raise HTTPException(status_code=400, detail=f"Unknown mode {body.mode}. Use one of: {', '.join(RESOURCE_MODES)}.")
+        if body.amount < 0:
+            raise HTTPException(status_code=400, detail="Amount cannot be negative.")
+        if body.target == "slot" and not (body.uuid and body.level is not None):
+            raise HTTPException(status_code=400, detail="Spell slots need uuid (the actor) and level (1 to 9, or pact).")
+        if body.target != "slot" and not body.itemUuid:
+            raise HTTPException(status_code=400, detail="Item uses and quantity need itemUuid.")
+        return await run(request, "resource", body.model_dump(exclude_none=True), write=True, client_id=client_id)
+
+    @app.post("/api/v1/target")
+    async def target(body: TargetBody, request: Request, client_id: str | None = None):
+        return await run(request, "target", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/tokens")
+    async def create_token(body: TokenCreateBody, request: Request, client_id: str | None = None):
+        return await run(request, "tokenCreate", body.model_dump(), write=True, client_id=client_id)
+
+    @app.patch("/api/v1/tokens")
+    async def set_token(body: TokenSetBody, request: Request, client_id: str | None = None):
+        return await run(request, "tokenSet", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/journals")
+    async def journal(body: JournalBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if not body.uuid and not body.name:
+            raise HTTPException(status_code=400, detail="Give a name for a new journal, or a uuid to add pages to one.")
+        return await run(request, "journal", body.model_dump(exclude_none=True), write=True, client_id=client_id)
+
+    @app.post("/api/v1/tables/roll")
+    async def roll_table(body: TableRollBody, request: Request, client_id: str | None = None):
+        api_token(request, "write" if body.chat else "read")
+        if not body.uuid and not body.name:
+            raise HTTPException(status_code=400, detail="Give the table uuid or name.")
+        # A roll that posts to chat is a write. A quiet one only reads the table.
+        return await run(request, "tableRoll", body.model_dump(), write=body.chat, client_id=client_id)
+
+    @app.post("/api/v1/compendium/import")
+    async def import_from_pack(body: ImportBody, request: Request, client_id: str | None = None):
+        return await run(request, "importFromPack", body.model_dump(), write=True, client_id=client_id)

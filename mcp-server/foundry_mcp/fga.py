@@ -283,6 +283,50 @@ class FgaClient(RelayClient):
             return await self._fga("POST", "/api/v1/damage", body={
                 "uuid": uuid, "amount": b["amount"], "mode": b.get("mode") or "damage",
                 "type": b.get("damageType"), "multiplier": b.get("multiplier")})
+        if endpoint == "/conditions":
+            return await self._fga("POST", "/api/v1/conditions", body={
+                "uuid": await self._actor_uuid(b.get("uuid", ""), b.get("name", ""), b.get("sceneId", "")),
+                "condition": b["condition"], "state": b.get("state") or "add"})
+        if endpoint == "/death-save":
+            return await self._fga("POST", "/api/v1/death-save", body={
+                "uuid": await self._actor_uuid(b.get("uuid", ""), b.get("name", ""), b.get("sceneId", ""))})
+        if endpoint == "/check":
+            return await self._fga("POST", "/api/v1/check", body={
+                "uuid": await self._actor_uuid(b.get("uuid", ""), b.get("name", ""), b.get("sceneId", "")),
+                "kind": b.get("kind") or "ability", "key": b["key"], "dc": b.get("dc"),
+                "advantage": bool(b.get("advantage")), "disadvantage": bool(b.get("disadvantage"))})
+        if endpoint == "/resources":
+            target = b.get("target") or "slot"
+            uuid = await self._actor_uuid(b.get("uuid", ""), b.get("name", ""), b.get("sceneId", "")) if target == "slot" else None
+            return await self._fga("POST", "/api/v1/resources", body={
+                "uuid": uuid, "target": target, "level": b.get("level"), "itemUuid": b.get("itemUuid"),
+                "mode": b.get("mode") or "spend", "amount": b.get("amount", 1)})
+        if endpoint == "/target":
+            uuids = list(b.get("uuids") or [])
+            for n in b.get("names") or []:
+                uuids.append(await self._token_uuid(n, b.get("sceneId")))
+            return await self._fga("POST", "/api/v1/target", body={"uuids": uuids})
+        if endpoint == "/tokens/create":
+            return await self._fga("POST", "/api/v1/tokens", body={
+                "actorUuid": b["actorUuid"], "sceneId": b.get("sceneId"), "x": b.get("x"), "y": b.get("y"),
+                "hidden": bool(b.get("hidden")), "name": b.get("tokenName")})
+        if endpoint == "/tokens/set":
+            return await self._fga("PATCH", "/api/v1/tokens", body={
+                "uuid": b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId")),
+                "hidden": b.get("hidden"), "rotation": b.get("rotation"), "elevation": b.get("elevation"),
+                "x": b.get("x"), "y": b.get("y")})
+        if endpoint == "/journals":
+            return await self._fga("POST", "/api/v1/journals", body={
+                "uuid": b.get("uuid"), "name": b.get("name"), "content": b.get("content"),
+                "pages": b.get("pages"), "folder": b.get("folder")})
+        if endpoint == "/tables/roll":
+            return await self._fga("POST", "/api/v1/tables/roll", body={
+                "uuid": b.get("uuid"), "name": b.get("name"), "chat": b.get("chat", True)})
+        if endpoint == "/compendium/import":
+            return await self._fga("POST", "/api/v1/compendium/import", body={
+                "pack": b["pack"], "id": b["id"], "name": b.get("name"), "folder": b.get("folder"),
+                "place": bool(b.get("place")), "sceneId": b.get("sceneId"), "x": b.get("x"), "y": b.get("y"),
+                "hidden": bool(b.get("hidden"))})
         raise RelayError(f"The FGA relay does not have {endpoint} yet. Nothing was changed.")
 
     async def _combat_create(self, b: dict[str, Any]) -> Any:
@@ -299,6 +343,26 @@ class FgaClient(RelayClient):
         return await self._fga("POST", "/api/v1/combat", body={
             "sceneId": b.get("sceneId"), "tokenUuids": uuids or None,
             "rollInitiative": bool(b.get("rollInitiative")), "start": bool(b.get("start"))})
+
+    async def _actor_uuid(self, uuid: str = "", name: str = "", sceneId: str = "") -> str:
+        if bool(uuid) == bool(name):
+            raise RelayError("Give exactly one of uuid or name.")
+        return uuid or await self._token_uuid(name, sceneId or None)
+
+    async def _get_conditions(self, uuid: str = "", name: str = "", sceneId: str = "") -> Any:
+        return await self._fga("GET", "/api/v1/conditions", {"uuid": await self._actor_uuid(uuid, name, sceneId)})
+
+    async def _get_resources(self, uuid: str = "", name: str = "", sceneId: str = "") -> Any:
+        return await self._fga("GET", "/api/v1/resources", {"uuid": await self._actor_uuid(uuid, name, sceneId)})
+
+    async def _get_last_attack(self, alias: str = "", limit: int = 60) -> Any:
+        return await self._fga("GET", "/api/v1/last-attack", {"alias": alias, "limit": limit})
+
+    async def _get_packs(self, type: str = "", q: str = "") -> Any:
+        return await self._fga("GET", "/api/v1/packs", {"type": type, "q": q})
+
+    async def _get_pack_index(self, pack: str, q: str = "", limit: int = 25) -> Any:
+        return await self._fga("GET", "/api/v1/pack-index", {"pack": pack, "q": q, "limit": limit})
 
     async def _get_activity(self, limit: int = 20, token: str = "", kind: str = "") -> Any:
         return await self._fga("GET", "/api/v1/activity", {"limit": limit, "token": token, "kind": kind})

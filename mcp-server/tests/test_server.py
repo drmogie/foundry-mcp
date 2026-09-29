@@ -143,6 +143,11 @@ EXPECTED_TOOLS = {
     "foundry_list_files",
     "foundry_read_file",
     "foundry_activity_log",
+    "foundry_get_conditions",
+    "foundry_get_resources",
+    "foundry_last_attack",
+    "foundry_list_packs",
+    "foundry_search_pack",
 }
 
 

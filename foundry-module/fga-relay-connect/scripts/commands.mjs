@@ -143,6 +143,64 @@ export function makeCommands(ctx) {
     return { value: Number(hp.value ?? 0), temp: Number(hp.temp ?? 0), max: Number(hp.effectiveMax ?? hp.max ?? 0) };
   };
 
+  const actorOf = (doc, uuid) => {
+    const actor = doc.documentName === "Actor" ? doc : doc.actor;
+    if (!actor) throw new Error(`${uuid} is not an actor or a token with an actor.`);
+    return actor;
+  };
+
+  const rollFrom = (out) => {
+    const first = Array.isArray(out) ? out[0] : out;
+    if (first && first.total !== undefined) return first;
+    return first?.rolls?.[0] ?? null;
+  };
+
+  const rollBrief = (roll) => roll ? {
+    formula: roll.formula,
+    total: roll.total,
+    dice: (roll.dice ?? []).map((d) => ({ faces: d.faces, results: (d.results ?? []).map((r) => r.result) }))
+  } : null;
+
+  /** Match "dex", "Dexterity" or "Sleight of Hand" against a Foundry config table like CONFIG.DND5E.skills. */
+  const resolveKey = (table, input, what) => {
+    const text = String(input ?? "").trim();
+    if (!table || typeof table !== "object") return text;
+    const lower = text.toLowerCase();
+    const label = (entry) => {
+      const raw = typeof entry === "string" ? entry : entry?.label ?? "";
+      return String(ctx.game?.i18n?.localize?.(raw) ?? raw).toLowerCase();
+    };
+    if (Object.hasOwn(table, text)) return text;
+    const hit = Object.entries(table).find(([key, entry]) => key.toLowerCase() === lower || label(entry) === lower);
+    if (!hit) throw new Error(`Unknown ${what} ${text}. Use one of: ${Object.keys(table).join(", ")}.`);
+    return hit[0];
+  };
+
+  const setTargets = async (uuids) => {
+    for (const t of [...(game.user.targets ?? [])]) t.setTarget(false, { releaseOthers: false, groupSelection: true });
+    for (const targetUuid of uuids) {
+      const tokenDoc = await find(targetUuid);
+      const token = tokenDoc.object;
+      if (!token) throw new Error(`${targetUuid} is not on the scene that is showing.`);
+      token.setTarget(true, { releaseOthers: false, groupSelection: true });
+    }
+  };
+
+  const sceneFor = (sceneId) => {
+    const scene = sceneId ? game.scenes.get(sceneId) : (game.scenes.viewed ?? game.scenes.active);
+    if (!scene) throw new Error(sceneId ? `No scene with id ${sceneId}.` : "No scene is showing.");
+    return scene;
+  };
+
+  const placeToken = async (actor, { sceneId, x, y, hidden, name } = {}) => {
+    const scene = sceneFor(sceneId);
+    const data = await actor.getTokenDocument({ x: Number(x ?? 0), y: Number(y ?? 0), hidden: !!hidden, ...(name ? { name } : {}) });
+    const made = await scene.createEmbeddedDocuments("Token", [data.toObject ? data.toObject() : data]);
+    return { scene: brief(scene), tokens: made.map(brief) };
+  };
+
+  const plainText = (html) => String(html ?? "").replace(/<[^>]+>/g, "").trim();
+
   const commands = {
     async ping() {
       return { pong: true, time: Date.now() };
@@ -425,6 +483,275 @@ export function makeCommands(ctx) {
       if (dice > 0) {
         out.hitDice = await spendHitDice(actor, dice);
         out.after = hpOf(actor);
+      }
+      return out;
+    },
+
+    // ----- conditions -----
+
+    async conditions({ uuid } = {}) {
+      const actor = actorOf(await find(uuid), uuid);
+      return { actor: brief(actor), conditions: [...(actor.statuses ?? [])] };
+    },
+
+    async condition({ uuid, condition, state } = {}) {
+      need(condition, "condition");
+      const how = state ?? "add";
+      if (!["add", "remove", "toggle"].includes(how)) throw new Error(`Unknown state ${how}. Use add, remove or toggle.`);
+      const actor = actorOf(await find(uuid), uuid);
+      if (typeof actor.toggleStatusEffect !== "function") throw new Error(`${actor.name} cannot take conditions this way.`);
+      const list = ctx.CONFIG?.statusEffects;
+      let id = String(condition);
+      if (Array.isArray(list) && list.length) {
+        const lower = id.toLowerCase();
+        const name = (e) => String(ctx.game?.i18n?.localize?.(e.name ?? e.label ?? "") ?? e.name ?? "").toLowerCase();
+        const hit = list.find((e) => String(e.id).toLowerCase() === lower) ?? list.find((e) => name(e) === lower);
+        if (!hit) throw new Error(`Unknown condition ${condition}. Use one of: ${list.map((e) => e.id).join(", ")}.`);
+        id = hit.id;
+      }
+      const has = !!actor.statuses?.has?.(id);
+      const want = how === "toggle" ? !has : how === "add";
+      if (want !== has) await actor.toggleStatusEffect(id, { active: want });
+      return { actor: brief(actor), condition: id, active: !!actor.statuses?.has?.(id), conditions: [...(actor.statuses ?? [])] };
+    },
+
+    // ----- death saves, saving throws, checks -----
+
+    async deathSave({ uuid } = {}) {
+      const actor = actorOf(await find(uuid), uuid);
+      if (typeof actor.rollDeathSave !== "function") throw new Error(`${actor.name} cannot roll a death save. This needs the D&D 5e system.`);
+      const roll = rollFrom(await actor.rollDeathSave({}, { configure: false }, { create: true }));
+      const death = actor.system?.attributes?.death ?? {};
+      return { actor: brief(actor), roll: rollBrief(roll), successes: death.success ?? 0, failures: death.failure ?? 0, hp: hpOf(actor) };
+    },
+
+    async check({ uuid, kind, key, dc, advantage, disadvantage } = {}) {
+      need(key, "key");
+      const what = kind ?? "ability";
+      if (!["save", "ability", "skill"].includes(what)) throw new Error(`Unknown kind ${what}. Use save, ability or skill.`);
+      const actor = actorOf(await find(uuid), uuid);
+      const dnd = ctx.CONFIG?.DND5E;
+      const config = {};
+      let method;
+      if (what === "skill") {
+        config.skill = resolveKey(dnd?.skills, key, "skill");
+        method = "rollSkill";
+      } else {
+        config.ability = resolveKey(dnd?.abilities, key, "ability");
+        method = what === "save" ? "rollSavingThrow" : (typeof actor.rollAbilityCheck === "function" ? "rollAbilityCheck" : "rollAbilityTest");
+      }
+      if (advantage && disadvantage) throw new Error("Pick advantage or disadvantage, not both.");
+      if (advantage) config.advantage = true;
+      if (disadvantage) config.disadvantage = true;
+      if (typeof actor[method] !== "function") throw new Error(`${actor.name} cannot roll that. This needs a recent D&D 5e system.`);
+      const roll = rollFrom(await actor[method](config, { configure: false }, { create: true }));
+      if (!roll) throw new Error(`${actor.name}'s roll was cancelled.`);
+      const out = { actor: brief(actor), kind: what, key: config.skill ?? config.ability, roll: rollBrief(roll) };
+      if (dc !== undefined && dc !== null && dc !== "") {
+        out.dc = Number(dc);
+        out.success = roll.total >= Number(dc);
+      }
+      return out;
+    },
+
+    // ----- spell slots, item uses, quantities -----
+
+    async resources({ uuid } = {}) {
+      const actor = actorOf(await find(uuid), uuid);
+      const spells = actor.system?.spells ?? {};
+      const slots = Object.entries(spells)
+        .filter(([k]) => /^spell\d+$/.test(k) || k === "pact")
+        .map(([k, v]) => ({ key: k, level: k === "pact" ? (v.level ?? null) : Number(k.slice(5)), value: Number(v.value ?? 0), max: Number(v.max ?? 0) }))
+        .filter((x) => x.max > 0);
+      const items = [...(actor.items ?? [])];
+      const uses = items
+        .filter((i) => Number(i.system?.uses?.max) > 0)
+        .map((i) => ({ id: i.id, uuid: i.uuid, name: i.name, spent: Number(i.system.uses.spent ?? 0), max: Number(i.system.uses.max), left: Number(i.system.uses.max) - Number(i.system.uses.spent ?? 0) }));
+      const quantities = items
+        .filter((i) => i.type === "consumable" && Number.isFinite(Number(i.system?.quantity)))
+        .map((i) => ({ id: i.id, uuid: i.uuid, name: i.name, quantity: Number(i.system.quantity) }));
+      return { actor: brief(actor), slots, uses, quantities };
+    },
+
+    async resource({ uuid, target, level, itemUuid, mode, amount } = {}) {
+      const kind = target ?? "slot";
+      if (!["slot", "uses", "quantity"].includes(kind)) throw new Error(`Unknown target ${kind}. Use slot, uses or quantity.`);
+      const how = mode ?? "spend";
+      if (!["spend", "restore", "set"].includes(how)) throw new Error(`Unknown mode ${how}. Use spend, restore or set.`);
+      const n = amount === undefined || amount === null ? 1 : Number(amount);
+      if (!Number.isInteger(n) || n < 0 || n > 1000) throw new Error("amount must be a whole number, 0 or more.");
+      if (kind === "slot") {
+        const actor = actorOf(await find(uuid), uuid);
+        need(level, "level");
+        const key = String(level).toLowerCase() === "pact" ? "pact" : `spell${Number(level)}`;
+        const slot = actor.system?.spells?.[key];
+        if (!slot || !(Number(slot.max) > 0)) throw new Error(`${actor.name} has no ${key === "pact" ? "pact" : `level ${level}`} spell slots.`);
+        const before = Number(slot.value ?? 0);
+        const max = Number(slot.max);
+        let after = how === "spend" ? before - n : how === "restore" ? Math.min(max, before + n) : Math.min(max, n);
+        if (after < 0) throw new Error(`${actor.name} has only ${before} ${key === "pact" ? "pact" : `level ${level}`} slots left.`);
+        await actor.update({ [`system.spells.${key}.value`]: after });
+        return { actor: brief(actor), target: "slot", key, before, after, max };
+      }
+      const item = await find(itemUuid);
+      if (item.documentName !== "Item") throw new Error(`${itemUuid} is not an item.`);
+      if (kind === "uses") {
+        const uses = item.system?.uses;
+        const max = Number(uses?.max);
+        if (!(max > 0)) throw new Error(`${item.name} has no limited uses.`);
+        const spent = Number(uses.spent ?? 0);
+        const left = max - spent;
+        const wanted = how === "spend" ? left - n : how === "restore" ? Math.min(max, left + n) : Math.min(max, n);
+        if (wanted < 0) throw new Error(`${item.name} has only ${left} uses left.`);
+        await item.update({ "system.uses.spent": max - wanted });
+        return { item: brief(item), target: "uses", before: left, after: wanted, max };
+      }
+      const before = Number(item.system?.quantity);
+      if (!Number.isFinite(before)) throw new Error(`${item.name} has no quantity.`);
+      const after = how === "spend" ? before - n : how === "restore" ? before + n : n;
+      if (after < 0) throw new Error(`There are only ${before} of ${item.name}.`);
+      await item.update({ "system.quantity": after });
+      return { item: brief(item), target: "quantity", before, after };
+    },
+
+    // ----- what just happened -----
+
+    async lastAttack({ alias, limit } = {}) {
+      const messages = game.messages.contents.slice(-clamp(limit, 60, 200));
+      const who = String(alias ?? "").toLowerCase();
+      let start = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (!/attack roll/i.test(m.flavor ?? "")) continue;
+        if (who && !String(m.speaker?.alias ?? "").toLowerCase().includes(who)) continue;
+        start = i;
+        break;
+      }
+      if (start < 0) throw new Error(who ? `No recent attack roll from ${alias}.` : "No recent attack roll in chat.");
+      const attackMsg = messages[start];
+      const out = {
+        attacker: attackMsg.speaker?.alias ?? null,
+        weapon: String(attackMsg.flavor ?? "").replace(/\s*-\s*Attack Roll.*/i, "") || null,
+        attack: rollBrief(attackMsg.rolls?.[0]),
+        outcome: null, target: null, ac: null, damage: null
+      };
+      for (const m of messages.slice(start + 1)) {
+        if (/attack roll/i.test(m.flavor ?? "")) break;
+        const text = plainText(m.content);
+        const hit = text.match(/(critical hit|critical miss|hit|miss)\s+on\s+(.+?)\s+\((\d+)\s+vs\s+AC\s+(\d+)\)/i);
+        if (hit && !out.outcome) {
+          out.outcome = hit[1].toLowerCase();
+          out.target = hit[2];
+          out.ac = Number(hit[4]);
+        }
+        if (/damage roll/i.test(m.flavor ?? "") && !out.damage) {
+          out.damage = { ...rollBrief(m.rolls?.[0]), flavor: m.flavor };
+        }
+      }
+      out.pending = out.outcome !== null && /hit/.test(out.outcome) && out.damage === null;
+      return out;
+    },
+
+    // ----- targeting and tokens -----
+
+    async target({ uuids } = {}) {
+      const list = Array.isArray(uuids) ? uuids : [];
+      await setTargets(list);
+      return { targets: list };
+    },
+
+    async tokenCreate({ actorUuid, sceneId, x, y, hidden, name } = {}) {
+      const actor = actorOf(await find(actorUuid), actorUuid);
+      const placed = await placeToken(actor, { sceneId, x, y, hidden, name });
+      return { actor: brief(actor), ...placed };
+    },
+
+    async tokenSet({ uuid, hidden, rotation, elevation, x, y } = {}) {
+      const token = await find(uuid);
+      if (token.documentName !== "Token") throw new Error(`${uuid} is not a token.`);
+      const data = {};
+      if (hidden !== undefined && hidden !== null) data.hidden = !!hidden;
+      if (rotation !== undefined && rotation !== null) data.rotation = Number(rotation);
+      if (elevation !== undefined && elevation !== null) data.elevation = Number(elevation);
+      if (x !== undefined && x !== null) data.x = Number(x);
+      if (y !== undefined && y !== null) data.y = Number(y);
+      if (!Object.keys(data).length) throw new Error("Nothing to change. Give hidden, rotation, elevation, x or y.");
+      await token.update(data);
+      return { ...brief(token), updated: data };
+    },
+
+    // ----- journals and tables -----
+
+    async journal({ uuid, name, pages, content, folder } = {}) {
+      const list = Array.isArray(pages) && pages.length ? pages : [{ name, text: content ?? "" }];
+      const pageData = list.map((p) => {
+        const title = p.name ?? name;
+        need(title, "page name");
+        return { name: String(title), type: "text", text: { content: String(p.text ?? p.content ?? ""), format: 1 } };
+      });
+      if (uuid) {
+        const entry = await find(uuid);
+        if (entry.documentName !== "JournalEntry") throw new Error(`${uuid} is not a journal entry.`);
+        const made = await entry.createEmbeddedDocuments("JournalEntryPage", pageData);
+        return { entry: brief(entry), addedPages: made.map(brief) };
+      }
+      need(name, "name");
+      const data = { name: String(name), pages: pageData };
+      if (folder) data.folder = folder;
+      const made = await docClass("JournalEntry").create(data);
+      return { created: brief(made), pages: pageData.length };
+    },
+
+    async tableRoll({ uuid, name, chat } = {}) {
+      let table = null;
+      if (uuid) table = await find(uuid);
+      else if (name) table = game.collections.get("RollTable")?.contents.find((t) => t.name === name);
+      if (!table || table.documentName !== "RollTable") throw new Error(uuid ? `${uuid} is not a rollable table.` : `No rollable table called ${name}.`);
+      const draw = await table.draw({ displayChat: chat !== false });
+      return {
+        table: brief(table),
+        roll: rollBrief(draw.roll),
+        results: (draw.results ?? []).map((r) => ({ text: r.description ?? r.text ?? r.name ?? "", documentUuid: r.documentUuid ?? null, range: r.range ?? null }))
+      };
+    },
+
+    // ----- compendiums -----
+
+    async packs({ type, q } = {}) {
+      const needle = String(q ?? "").trim().toLowerCase();
+      return [...(game.packs?.contents ?? [])]
+        .filter((p) => (!type || p.documentName === type) && (!needle || `${p.title} ${p.collection}`.toLowerCase().includes(needle)))
+        .map((p) => ({ id: p.collection, label: p.title, type: p.documentName, count: p.index?.size ?? null, package: p.metadata?.packageName ?? null }));
+    },
+
+    async packIndex({ pack, q, limit } = {}) {
+      need(pack, "pack");
+      const p = game.packs?.get(pack);
+      if (!p) throw new Error(`No compendium called ${pack}. List them with packs.`);
+      const index = await p.getIndex();
+      const needle = String(q ?? "").trim().toLowerCase();
+      const all = [...index].filter((e) => !needle || String(e.name ?? "").toLowerCase().includes(needle));
+      const max = clamp(limit, 25, 200);
+      return {
+        pack, total: all.length, returned: Math.min(all.length, max),
+        results: all.slice(0, max).map((e) => ({ id: e._id, uuid: e.uuid ?? `Compendium.${pack}.${p.documentName}.${e._id}`, name: e.name, type: e.type ?? null }))
+      };
+    },
+
+    async importFromPack({ pack, id, name, folder, place, sceneId, x, y, hidden } = {}) {
+      need(pack, "pack");
+      need(id, "id");
+      const p = game.packs?.get(pack);
+      if (!p) throw new Error(`No compendium called ${pack}. List them with packs.`);
+      if (!ALLOWED.includes(p.documentName)) throw new Error(`${p.documentName} documents are not allowed through the relay.`);
+      const world = game.collections.get(p.documentName);
+      if (!world?.importFromCompendium) throw new Error(`Cannot import ${p.documentName} documents.`);
+      const doc = await world.importFromCompendium(p, id, { ...(name ? { name } : {}), ...(folder ? { folder } : {}) }, {});
+      if (!doc) throw new Error(`Nothing with id ${id} in ${pack}.`);
+      const out = { imported: brief(doc) };
+      if (place) {
+        if (doc.documentName !== "Actor") throw new Error("Only actors can be placed on a scene.");
+        Object.assign(out, await placeToken(doc, { sceneId, x, y, hidden }));
       }
       return out;
     },

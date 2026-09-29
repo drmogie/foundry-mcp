@@ -143,3 +143,14 @@
 - foundry_rest has hit_dice. It runs the short rest, then spends that many dice: biggest die first, rolls with Con, heals, adds one to the class's used dice, stops at full hit points.
 - Works with both dnd5e class fields (hd.denomination and hd.spent, or the older hitDice and hitDiceUsed).
 - Monsters have no class, so they get a plain message.
+
+## 2026-09-29: big batch of new abilities (relay .8, module .7, mcp-server .6)
+
+- Module commands: conditions, condition, deathSave, check, resources, resource, lastAttack, target, tokenCreate, tokenSet, journal, tableRoll, packs, packIndex, importFromPack.
+- Relay routes and MCP tools for each. Ten new write tools (22 in all) and five new read tools.
+- Checks use the dnd5e v5 roll calls (rollSavingThrow, rollAbilityCheck, rollSkill, rollDeathSave) with no dialog. rollAbilityTest is the fallback for ability checks only.
+- Spell slots, item uses and quantity refuse to go below zero.
+- Last attack reads the chat: it pairs the attack roll with the "hit on X (n vs AC m)" line and the damage roll. pending means damage is not rolled yet.
+- Relay web page: Recent changes list with a token filter (GET /api/activity, login needed).
+- Not yet tried live. Test on MCP Test first.
+- Tests: 62 relay, 64 module, 87 mcp-server.

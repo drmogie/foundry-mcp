@@ -1,6 +1,6 @@
 # FGA Relay
 
-Version: 2026.09.29.7
+Version: 2026.09.29.8
 
 Our own relay between Foundry VTT and tools like Claude.
 It is the REST API. The MCP server sits on top of it.
@@ -31,6 +31,26 @@ Read routes (any token):
 - GET /api/v1/clients lists connected Foundry clients.
 - POST /api/v1/ping tests the link to Foundry.
 - POST /api/v1/rolls with `"chat": false` rolls dice without posting.
+
+More read routes (any token):
+- GET /api/v1/conditions?uuid=... lists conditions on an actor or token.
+- GET /api/v1/resources?uuid=... lists spell slots, items with limited uses and consumable counts.
+- GET /api/v1/last-attack?alias=Bob gives the latest attack in one answer: roll, hit or miss, target, armor class and damage. `pending` means the damage is not rolled yet.
+- GET /api/v1/packs?type=Actor&q=monst lists compendiums.
+- GET /api/v1/pack-index?pack=dnd5e.monsters&q=owl searches one compendium.
+
+More write routes (write token, allowed worlds only):
+- POST /api/v1/conditions with `uuid`, `condition` and `state` (add, remove or toggle).
+- POST /api/v1/death-save with `uuid`.
+- POST /api/v1/check with `uuid`, `kind` (save, ability or skill), `key`, and optional `dc`, `advantage`, `disadvantage`.
+- POST /api/v1/resources with `target` (slot, uses or quantity), `mode` (spend, restore or set) and `amount`. Slots use `uuid` and `level`. Items use `itemUuid`.
+- POST /api/v1/target with `uuids`. An empty list clears targets.
+- POST /api/v1/tokens with `actorUuid` makes a token. PATCH /api/v1/tokens with `uuid` shows, hides, rotates or moves one.
+- POST /api/v1/journals with `name` and `content` or `pages`. Add `uuid` to add pages to an existing journal.
+- POST /api/v1/tables/roll with `name` or `uuid`. A quiet roll (`chat` false) works with a read token.
+- POST /api/v1/compendium/import with `pack` and `id`. Add `place` to put the token on the scene.
+
+The web page also shows a Recent changes list, from GET /api/activity (login needed).
 
 Write routes (write token, allowed worlds only):
 - PATCH /api/v1/document with `uuid` and `data` changes a document.

@@ -376,3 +376,105 @@ async def test_rest_by_uuid_and_by_name(relay):
 async def test_rest_explains_when_not_on_our_relay(monkeypatch):
     monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key="k"))
     assert "FGA relay" in await server.foundry_rest(uuid="Actor.a1")
+
+
+# ----- newer tools -----
+
+async def test_read_tools_for_conditions_resources_last_attack_and_packs(relay):
+    await server.foundry_get_conditions(uuid="Actor.a1")
+    assert last(relay)[:3] == ("GET", "/api/v1/conditions", {"uuid": "Actor.a1"})
+    await server.foundry_get_resources(name="Foreman")
+    assert last(relay)[2] == {"uuid": "Scene.s1.Token.t2"}
+    await server.foundry_last_attack(alias="Bob", limit=30)
+    assert last(relay)[:3] == ("GET", "/api/v1/last-attack", {"alias": "Bob", "limit": "30"})
+    await server.foundry_list_packs(type="Actor", q="monst")
+    assert last(relay)[:3] == ("GET", "/api/v1/packs", {"type": "Actor", "q": "monst"})
+    await server.foundry_search_pack(pack="dnd5e.monsters", q="owl")
+    assert last(relay)[:3] == ("GET", "/api/v1/pack-index", {"pack": "dnd5e.monsters", "q": "owl", "limit": "25"})
+    assert "exactly one" in await server.foundry_get_conditions()
+    assert "exactly one" in await server.foundry_get_resources(uuid="Actor.a1", name="Bob")
+
+
+async def test_condition_and_death_save_and_check(relay):
+    await server.foundry_condition(condition="prone", name="Bob")
+    m, path, _q, body = last(relay)
+    assert (m, path, body) == ("POST", "/api/v1/conditions", {"uuid": "Scene.s1.Token.t1", "condition": "prone", "state": "add"})
+    await server.foundry_condition(condition="prone", state="remove", uuid="Actor.a1")
+    assert last(relay)[3]["state"] == "remove"
+    await server.foundry_death_save(uuid="Actor.a1")
+    assert last(relay)[1:2] == ("/api/v1/death-save",) and last(relay)[3] == {"uuid": "Actor.a1"}
+    await server.foundry_check(key="dex", kind="save", uuid="Actor.a1", dc=15, advantage=True)
+    assert last(relay)[3] == {"uuid": "Actor.a1", "kind": "save", "key": "dex", "dc": 15, "advantage": True, "disadvantage": False}
+    await server.foundry_check(key="ath", kind="skill", name="Bob")
+    assert last(relay)[3]["uuid"] == "Scene.s1.Token.t1" and last(relay)[3]["kind"] == "skill"
+    assert "exactly one" in await server.foundry_condition(condition="prone")
+    assert "exactly one" in await server.foundry_check(key="dex", uuid="a", name="b")
+
+
+async def test_spend_resource_slots_uses_and_quantity(relay):
+    await server.foundry_spend_resource(level="2", uuid="Actor.a1")
+    assert last(relay)[3] == {"uuid": "Actor.a1", "target": "slot", "level": "2", "mode": "spend", "amount": 1}
+    await server.foundry_spend_resource(target="uses", item_uuid="Item.i2", mode="restore", amount=2)
+    assert last(relay)[3] == {"target": "uses", "mode": "restore", "amount": 2, "itemUuid": "Item.i2"} or \
+        last(relay)[3] == {"target": "uses", "itemUuid": "Item.i2", "mode": "restore", "amount": 2}
+    await server.foundry_spend_resource(target="quantity", item_uuid="Item.i1", amount=0, mode="set")
+    assert last(relay)[3]["amount"] == 0 and last(relay)[3]["mode"] == "set"
+    assert "exactly one" in await server.foundry_spend_resource(level="1")
+
+
+async def test_target_tokens_journals_tables_and_import(relay):
+    await server.foundry_target(names=["Foreman"])
+    assert last(relay)[3] == {"uuids": ["Scene.s1.Token.t2"]}
+    await server.foundry_target()
+    assert last(relay)[3] == {"uuids": []}
+    await server.foundry_add_token(actor_uuid="Actor.a1", x=100, y=200, hidden=True, token_name="Bob II")
+    assert last(relay)[:2] == ("POST", "/api/v1/tokens")
+    assert last(relay)[3] == {"actorUuid": "Actor.a1", "x": 100, "y": 200, "hidden": True, "name": "Bob II"}
+    await server.foundry_set_token(name="Foreman", hidden=True)
+    assert last(relay)[:2] == ("PATCH", "/api/v1/tokens")
+    assert last(relay)[3] == {"uuid": "Scene.s1.Token.t2", "hidden": True}
+    await server.foundry_set_token(uuid="Token.t1", hidden=False)
+    assert last(relay)[3]["hidden"] is False
+    assert "exactly one" in await server.foundry_set_token(hidden=True)
+    await server.foundry_create_journal(name="Notes", content="hi")
+    assert last(relay)[3] == {"name": "Notes", "content": "hi"}
+    await server.foundry_create_journal(name="Town", pages=[{"name": "Inn", "text": "a"}], folder="f1")
+    assert last(relay)[3]["pages"] == [{"name": "Inn", "text": "a"}] and last(relay)[3]["folder"] == "f1"
+    await server.foundry_roll_table(name="Loot", post_to_chat=False)
+    assert last(relay)[1:2] == ("/api/v1/tables/roll",) and last(relay)[3] == {"name": "Loot", "chat": False}
+    assert "table name or uuid" in await server.foundry_roll_table()
+    await server.foundry_import_from_pack(pack="dnd5e.monsters", id="m1", name="Gob", place=True, x=5, y=6)
+    assert last(relay)[3] == {"pack": "dnd5e.monsters", "id": "m1", "name": "Gob", "place": True, "x": 5, "y": 6, "hidden": False}
+
+
+async def test_new_tools_explain_when_not_on_our_relay(monkeypatch):
+    monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key="k"))
+    for out in (
+        await server.foundry_get_conditions(uuid="Actor.a1"),
+        await server.foundry_get_resources(uuid="Actor.a1"),
+        await server.foundry_last_attack(),
+        await server.foundry_list_packs(),
+        await server.foundry_search_pack(pack="x"),
+        await server.foundry_condition(condition="prone", uuid="Actor.a1"),
+        await server.foundry_death_save(uuid="Actor.a1"),
+        await server.foundry_check(key="dex", uuid="Actor.a1"),
+        await server.foundry_spend_resource(uuid="Actor.a1", level="1"),
+        await server.foundry_target(),
+        await server.foundry_add_token(actor_uuid="Actor.a1"),
+        await server.foundry_set_token(uuid="Token.t1", hidden=True),
+        await server.foundry_create_journal(name="x"),
+        await server.foundry_roll_table(name="x"),
+        await server.foundry_import_from_pack(pack="x", id="y"),
+    ):
+        assert "FGA relay" in out
+
+
+def test_all_new_write_tools_are_offered_when_writes_are_on():
+    from mcp.server.fastmcp import FastMCP
+    m = FastMCP("t")
+    server.register_write_tools(m)
+    names = {t.name for t in m._tool_manager.list_tools()}
+    for want in ("foundry_condition", "foundry_death_save", "foundry_check", "foundry_spend_resource", "foundry_target",
+                 "foundry_add_token", "foundry_set_token", "foundry_create_journal", "foundry_roll_table", "foundry_import_from_pack"):
+        assert want in names
+    assert len(names) == 22

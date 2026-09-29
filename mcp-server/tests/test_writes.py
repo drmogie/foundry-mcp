@@ -54,6 +54,16 @@ async def test_write_tools_register_only_when_asked():
         "foundry_combat_turn",
         "foundry_apply_damage",
         "foundry_rest",
+        "foundry_condition",
+        "foundry_death_save",
+        "foundry_check",
+        "foundry_spend_resource",
+        "foundry_target",
+        "foundry_add_token",
+        "foundry_set_token",
+        "foundry_create_journal",
+        "foundry_roll_table",
+        "foundry_import_from_pack",
     }
 
 

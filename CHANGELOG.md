@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.6
+- New abilities: conditions, death saves, saves and checks, spell slots and item uses, last attack, targets, tokens, journals, tables, compendium import, and a Recent changes list on the relay page.
+- Relay 2026.09.29.8, module 2026.09.29.7, mcp-server 2026.09.29.6. Update all three.
+
 ## 2026.09.29.5
 - Short rest can spend hit dice. Relay 2026.09.29.7, module 2026.09.29.6, mcp-server 2026.09.29.5. Update all three.
 

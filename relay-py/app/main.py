@@ -217,6 +217,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="That token is already gone.")
         return {"ok": True}
 
+    @app.get("/api/activity")
+    async def web_activity(request: Request, limit: int = 30, token: str | None = None, kind: str | None = None) -> dict[str, Any]:
+        require_user(request)
+        return {"activity": activity.recent(limit, token, kind)}
+
     # ----- REST API (API token) -----
 
     register_v1(app, hub, settings, api_token, pick_client, activity)

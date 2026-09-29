@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.29.5
+Version: 2026.09.29.6
 
 Lets Claude read a Foundry VTT world.
 It talks to our own FGA relay add-on.
@@ -24,6 +24,11 @@ Write tools exist, but they are off until you turn them on. See "Write tools" be
 - foundry_get_effects: active effects on an actor or token
 - foundry_list_files: files in Foundry's data folders
 - foundry_read_file: read one text file, such as a mod's module.json
+- foundry_get_conditions: conditions on an actor or token
+- foundry_get_resources: spell slots, item charges, consumable counts
+- foundry_last_attack: the latest attack in one answer (roll, hit or miss, target, damage)
+- foundry_list_packs: compendiums
+- foundry_search_pack: find entries in one compendium
 - foundry_activity_log: what each API token changed lately
 
 ## Settings
@@ -50,7 +55,7 @@ This server only talks to our own FGA relay. ThreeHats is gone.
 
 ## Write tools (optional, off by default)
 
-Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twelve tools appear:
+Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twenty-two tools appear:
 
 - foundry_send_chat: post a chat message
 - foundry_roll: roll dice
@@ -64,6 +69,16 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twelve tools appear:
 - foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true`
 - foundry_rest: long or short rest with D&D 5e rules. A short rest can spend hit dice (`hit_dice`)
 - foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules
+- foundry_condition: add, remove or toggle a condition
+- foundry_death_save: roll a death save
+- foundry_check: roll a saving throw, ability check or skill check, with advantage and a DC
+- foundry_spend_resource: spend, restore or set a spell slot, item charges or a quantity
+- foundry_target: set or clear the GM's targets
+- foundry_add_token: put an actor on a scene
+- foundry_set_token: show, hide, rotate or move a token
+- foundry_create_journal: make a journal or add pages
+- foundry_roll_table: roll on a rollable table
+- foundry_import_from_pack: copy a compendium entry into the world, and place it
 
 Safety rules:
 

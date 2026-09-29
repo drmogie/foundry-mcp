@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.09.29.8
+- New routes: conditions, death saves, checks, spell slots and item uses, last attack, targets, tokens, journals, tables, compendium list, search and import.
+- The web page shows a Recent changes list with a token filter.
+- Needs FGA Relay Connect 2026.09.29.7 in Foundry.
+
 ## 2026.09.29.7
 - Short rest can spend hit dice: send `hitDice` to POST /api/v1/rest.
 - Needs FGA Relay Connect 2026.09.29.6 in Foundry.

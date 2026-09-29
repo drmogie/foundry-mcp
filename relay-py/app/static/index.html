@@ -129,6 +129,16 @@
     </section>
 
     <section class="card">
+      <h2>Recent changes</h2>
+      <p class="muted">Every write made with an API token. Newest first. Blocked ones show too.</p>
+      <div class="row">
+        <select id="aFilter"><option value="">All tokens</option></select>
+        <button id="aRefresh" type="button">Refresh</button>
+      </div>
+      <div id="activityList" class="muted">Nothing yet.</div>
+    </section>
+
+    <section class="card">
       <h2>Connected clients</h2>
       <div id="clients" class="muted">None yet.</div>
     </section>
@@ -247,6 +257,35 @@ async function loadTokens() {
   }
 }
 
+async function loadActivity() {
+  const sel = $("aFilter");
+  const q = sel.value ? "&token=" + encodeURIComponent(sel.value) : "";
+  const { activity } = await api("/api/activity?limit=30" + q);
+  const box = $("activityList");
+  box.textContent = "";
+  if (!activity.length) { box.textContent = "Nothing yet."; return; }
+  const names = new Set();
+  for (const a of activity) {
+    names.add(a.token);
+    const d = document.createElement("div");
+    d.className = "light";
+    const dot = document.createElement("span"); dot.className = "dot " + (a.ok ? "ok" : "bad");
+    const wrap = document.createElement("div"); wrap.style.flex = "1";
+    const b = document.createElement("b"); b.textContent = a.kind + " by " + a.token;
+    const m = document.createElement("span"); m.className = "muted";
+    m.textContent = [when(a.at), a.worldId ? "World " + a.worldId : "", a.ok ? a.summary : (a.error || "Failed")].filter(Boolean).join(". ");
+    wrap.append(b, document.createElement("br"), m);
+    d.append(dot, wrap); box.append(d);
+  }
+  const keep = sel.value;
+  const have = new Set([...sel.options].map((o) => o.value));
+  for (const n of names) if (!have.has(n)) sel.append(new Option(n, n));
+  sel.value = keep;
+}
+
+$("aFilter").addEventListener("change", loadActivity);
+$("aRefresh").addEventListener("click", loadActivity);
+
 $("tokenForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const msg = $("tokenMsg"); msg.className = "msg"; msg.textContent = "";
@@ -280,6 +319,7 @@ async function start() {
   await loadConnect();
   await refresh();
   await loadTokens();
+  await loadActivity();
   timer = setInterval(refresh, 3000);
 }
 

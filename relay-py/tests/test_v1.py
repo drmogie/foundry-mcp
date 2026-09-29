@@ -426,3 +426,99 @@ async def test_rest_route(relay):
             ("rest", {"uuid": "Actor.a1", "type": "short", "hitDice": 2}),
         ]
     await reader.aclose(); await api.aclose(); await web.aclose()
+
+
+# ----- conditions, checks, resources, tokens, journals, compendiums -----
+
+@pytest.mark.asyncio
+async def test_new_read_routes_send_the_right_command(relay):
+    web, key, api = await setup(relay, name="r", scope="read")
+    async with Foundry(relay, key) as f:
+        assert (await api.get("/api/v1/conditions", params={"uuid": "Actor.a1"})).status_code == 200
+        assert (await api.get("/api/v1/resources", params={"uuid": "Actor.a1"})).status_code == 200
+        assert (await api.get("/api/v1/last-attack", params={"alias": "Bob", "limit": 30})).status_code == 200
+        assert (await api.get("/api/v1/packs", params={"type": "Actor", "q": "monst"})).status_code == 200
+        assert (await api.get("/api/v1/pack-index", params={"pack": "dnd5e.monsters", "q": "owl", "limit": 5})).status_code == 200
+        assert (await api.get("/api/v1/pack-index")).status_code == 422
+        assert f.seen == [
+            ("conditions", {"uuid": "Actor.a1"}),
+            ("resources", {"uuid": "Actor.a1"}),
+            ("lastAttack", {"alias": "Bob", "limit": 30}),
+            ("packs", {"type": "Actor", "q": "monst"}),
+            ("packIndex", {"pack": "dnd5e.monsters", "q": "owl", "limit": 5}),
+        ]
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_new_write_routes_send_the_right_command(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    async with Foundry(relay, key) as f:
+        ok = lambda r: r.status_code == 200
+        assert ok(await api.post("/api/v1/conditions", json={"uuid": "Actor.a1", "condition": "prone"}))
+        assert ok(await api.post("/api/v1/death-save", json={"uuid": "Actor.a1"}))
+        assert ok(await api.post("/api/v1/check", json={"uuid": "Actor.a1", "kind": "save", "key": "dex", "dc": 15, "advantage": True}))
+        assert ok(await api.post("/api/v1/resources", json={"uuid": "Actor.a1", "target": "slot", "level": 2}))
+        assert ok(await api.post("/api/v1/resources", json={"target": "uses", "itemUuid": "Item.i2", "mode": "restore", "amount": 2}))
+        assert ok(await api.post("/api/v1/target", json={"uuids": ["Token.t1"]}))
+        assert ok(await api.post("/api/v1/tokens", json={"actorUuid": "Actor.a1", "x": 100, "y": 200, "hidden": True}))
+        assert ok(await api.patch("/api/v1/tokens", json={"uuid": "Token.t1", "hidden": False}))
+        assert ok(await api.post("/api/v1/journals", json={"name": "Notes", "content": "hi"}))
+        assert ok(await api.post("/api/v1/tables/roll", json={"name": "Loot"}))
+        assert ok(await api.post("/api/v1/compendium/import", json={"pack": "dnd5e.monsters", "id": "m1", "place": True}))
+        kinds = [k for k, _ in f.seen]
+        assert kinds == ["condition", "deathSave", "check", "resource", "resource", "target", "tokenCreate", "tokenSet",
+                         "journal", "tableRoll", "importFromPack"]
+        assert f.seen[2][1] == {"uuid": "Actor.a1", "kind": "save", "key": "dex", "dc": 15.0, "advantage": True, "disadvantage": False}
+        assert f.seen[3][1] == {"uuid": "Actor.a1", "target": "slot", "level": 2, "mode": "spend", "amount": 1}
+        assert f.seen[8][1] == {"name": "Notes", "content": "hi"}
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_new_write_routes_check_input_and_scope(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    ro = (await web.post("/api/tokens", json={"name": "r", "scope": "read"})).json()["token"]
+    reader = httpx.AsyncClient(base_url=f"http://{relay}", headers={"x-api-key": ro})
+    async with Foundry(relay, key) as f:
+        bad = [
+            ("/api/v1/conditions", {"uuid": "A", "condition": "x", "state": "nap"}, "add, remove, toggle"),
+            ("/api/v1/check", {"uuid": "A", "kind": "nap", "key": "x"}, "save, ability, skill"),
+            ("/api/v1/check", {"uuid": "A", "key": "x", "advantage": True, "disadvantage": True}, "not both"),
+            ("/api/v1/resources", {"uuid": "A", "target": "gold"}, "slot, uses, quantity"),
+            ("/api/v1/resources", {"uuid": "A", "level": 1, "mode": "steal"}, "spend, restore, set"),
+            ("/api/v1/resources", {"uuid": "A", "level": 1, "amount": -1}, "negative"),
+            ("/api/v1/resources", {"target": "slot", "level": 1}, "Spell slots need"),
+            ("/api/v1/resources", {"target": "uses"}, "need itemUuid"),
+            ("/api/v1/journals", {}, "Give a name"),
+            ("/api/v1/tables/roll", {}, "table uuid or name"),
+        ]
+        for path, body, words in bad:
+            r = await api.post(path, json=body)
+            assert r.status_code == 400 and words in r.json()["detail"], (path, r.text)
+        assert (await reader.post("/api/v1/conditions", json={"uuid": "A", "condition": "prone"})).status_code == 403
+        assert (await reader.post("/api/v1/check", json={"uuid": "A", "key": "dex"})).status_code == 403
+        assert (await reader.post("/api/v1/compendium/import", json={"pack": "p", "id": "i"})).status_code == 403
+        # a quiet table roll only reads, so a read token may do it
+        assert (await reader.post("/api/v1/tables/roll", json={"name": "Loot", "chat": False})).status_code == 200
+        assert (await reader.post("/api/v1/tables/roll", json={"name": "Loot"})).status_code == 403
+        assert f.seen == [("tableRoll", {"name": "Loot", "chat": False})]
+    await reader.aclose(); await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_web_page_can_read_the_activity_log(relay):
+    web, key, api = await setup(relay, name="Claude", scope="write")
+    anon = httpx.AsyncClient(base_url=f"http://{relay}")
+    assert (await anon.get("/api/activity")).status_code == 401
+    async with Foundry(relay, key):
+        assert (await api.post("/api/v1/chat", json={"content": "hi"})).status_code == 200
+        assert (await api.post("/api/v1/conditions", json={"uuid": "Actor.a1", "condition": "prone"})).status_code == 200
+    rows = (await web.get("/api/activity")).json()["activity"]
+    assert [r["kind"] for r in rows] == ["condition", "sendChat"]
+    assert rows[0]["token"] == "Claude" and rows[0]["ok"] is True
+    only = (await web.get("/api/activity", params={"kind": "sendChat"})).json()["activity"]
+    assert len(only) == 1
+    assert (await web.get("/api/activity", params={"token": "Nobody"})).json()["activity"] == []
+    assert "Recent changes" in (await anon.get("/")).text
+    await anon.aclose(); await api.aclose(); await web.aclose()
