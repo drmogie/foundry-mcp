@@ -7,9 +7,14 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
+from .activity import ActivityLog
 from .hub import Client, FoundryError, Hub, HubError
 from .settings import Settings
 from .tokens import Token
+
+
+COMBAT_ACTIONS = ("start", "nextTurn", "previousTurn", "nextRound", "previousRound", "rollAll", "rollNpc", "end")
+DAMAGE_MODES = ("damage", "heal", "temp")
 
 
 class UpdateBody(BaseModel):
@@ -51,6 +56,27 @@ class MoveBody(BaseModel):
     y: float
 
 
+class CombatCreateBody(BaseModel):
+    sceneId: str | None = None
+    tokenUuids: list[str] | None = None
+    rollInitiative: bool = False
+    start: bool = False
+
+
+class CombatControlBody(BaseModel):
+    action: str
+    combatId: str | None = None
+    confirm: bool = False
+
+
+class DamageBody(BaseModel):
+    uuid: str
+    amount: float
+    mode: str = "damage"
+    type: str | None = None
+    multiplier: float | None = None
+
+
 class SceneSwitchBody(BaseModel):
     id: str | None = None
     name: str | None = None
@@ -63,6 +89,7 @@ def register_v1(
     settings: Settings,
     api_token: Callable[[Request, str], Token],
     pick_client: Callable[[Token | None, str | None], Client],
+    activity: ActivityLog,
 ) -> None:
     async def run(
         request: Request,
@@ -73,22 +100,36 @@ def register_v1(
         client_id: str | None = None,
     ) -> dict[str, Any]:
         rec = api_token(request, "write" if write else "read")
+        clean = {k: v for k, v in (data or {}).items() if v is not None}
+        world_id: str | None = None
+
+        def note(ok: bool, error: str | None = None) -> None:
+            if write:
+                activity.add(token_id=rec.id, token_name=rec.name, world_id=world_id, kind=kind,
+                             data=clean, ok=ok, error=error)
+
         try:
             client = pick_client(rec, client_id)
-            if write and not settings.world_may_write(client.info.get("worldId")):
+            world_id = client.info.get("worldId")
+            if write and not settings.world_may_write(world_id):
                 raise HTTPException(
                     status_code=403,
                     detail=(
-                        f"Writes are not allowed in world {client.info.get('worldId')}. "
+                        f"Writes are not allowed in world {world_id}. "
                         f"Allowed worlds: {settings.write_worlds}. Change write_worlds in the add-on options."
                     ),
                 )
-            clean = {k: v for k, v in (data or {}).items() if v is not None}
             result = await hub.request(client, kind, clean)
         except FoundryError as exc:
+            note(False, str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except HubError as exc:
+            note(False, str(exc))
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except HTTPException as exc:
+            note(False, str(exc.detail))
+            raise
+        note(True)
         return {"ok": True, "clientId": client.client_id, "data": result}
 
     # ----- read -----
@@ -126,6 +167,11 @@ def register_v1(
     @app.get("/api/v1/users")
     async def users(request: Request, client_id: str | None = None):
         return await run(request, "users", client_id=client_id)
+
+    @app.get("/api/v1/activity")
+    async def get_activity(request: Request, limit: int = 50, token: str | None = None, kind: str | None = None):
+        api_token(request, "read")
+        return {"ok": True, "data": activity.recent(limit, token, kind)}
 
     @app.get("/api/v1/files")
     async def list_files(request: Request, path: str = "", source: str = "data", client_id: str | None = None):
@@ -173,3 +219,29 @@ def register_v1(
     @app.post("/api/v1/scene/switch")
     async def switch_scene(body: SceneSwitchBody, request: Request, client_id: str | None = None):
         return await run(request, "switchScene", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/combat")
+    async def create_combat(body: CombatCreateBody, request: Request, client_id: str | None = None):
+        return await run(request, "combatCreate", body.model_dump(), write=True, client_id=client_id)
+
+    @app.post("/api/v1/combat/control")
+    async def control_combat(body: CombatControlBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")  # 401 and 403 first, then the reminders
+        if body.action not in COMBAT_ACTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown combat action {body.action}. Use one of: {', '.join(COMBAT_ACTIONS)}.",
+            )
+        if body.action == "end" and not body.confirm:
+            raise HTTPException(status_code=400, detail="Ending combat removes it. Add confirm=true to really end it.")
+        payload = {"action": body.action, "combatId": body.combatId}
+        return await run(request, "combatControl", payload, write=True, client_id=client_id)
+
+    @app.post("/api/v1/damage")
+    async def apply_damage(body: DamageBody, request: Request, client_id: str | None = None):
+        api_token(request, "write")
+        if body.mode not in DAMAGE_MODES:
+            raise HTTPException(status_code=400, detail=f"Unknown mode {body.mode}. Use one of: {', '.join(DAMAGE_MODES)}.")
+        if body.amount < 0:
+            raise HTTPException(status_code=400, detail="Amount cannot be negative. Use mode heal to add hit points.")
+        return await run(request, "applyDamage", body.model_dump(), write=True, client_id=client_id)

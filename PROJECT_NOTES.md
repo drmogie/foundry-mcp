@@ -111,3 +111,13 @@
 - 73 mcp-server tests, 52 relay tests, 40 module tests.
 - Switch: set FOUNDRY_API_KEY to an fgat_ token. ThreeHats stays as backup.
 - Next: try it live on ha-pi4, then Stage 4.
+
+## 2026-09-29: Stage 4 (relay .5, module .4, mcp-server 2026.09.29.2)
+
+- New relay routes: POST /api/v1/combat, POST /api/v1/combat/control, POST /api/v1/damage, GET /api/v1/activity.
+- New module commands: combatCreate, combatControl, applyDamage. Damage uses the dnd5e actor.applyDamage when it exists, else plain hit point math.
+- Activity log lives in relay-py/app/activity.py (SQLite, last 1000 writes, blocked writes included).
+- New MCP tools: foundry_start_combat, foundry_combat_turn, foundry_apply_damage, foundry_activity_log. They only work on our relay.
+- Tests: 57 relay, 47 module, 81 mcp-server.
+- Not yet run against real Foundry. Try in MCP Test: make a combat, next turn, apply damage to Bob, read the log.
+- Next: live test, then maybe show the activity log on the relay web page.

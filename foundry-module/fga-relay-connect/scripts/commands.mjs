@@ -72,6 +72,40 @@ export function makeCommands(ctx) {
 
   const brief = (doc) => ({ id: doc.id, uuid: doc.uuid, name: doc.name, documentName: doc.documentName });
 
+  const combatBrief = (c) => ({
+    id: c.id,
+    uuid: c.uuid,
+    round: c.round,
+    turn: c.turn,
+    started: !!c.started,
+    active: !!c.active,
+    sceneId: c.scene?.id ?? c.sceneId ?? null,
+    combatants: c.combatants.contents.map((x) => ({
+      id: x.id,
+      uuid: x.uuid,
+      name: x.name,
+      actorId: x.actorId ?? null,
+      tokenId: x.tokenId ?? null,
+      initiative: x.initiative ?? null,
+      defeated: !!x.defeated,
+      hidden: !!x.hidden
+    }))
+  });
+
+  function pickCombat(combatId) {
+    const combat = combatId
+      ? game.combats.get(combatId)
+      : (game.combats.active ?? game.combats.contents[0]);
+    if (!combat) throw new Error(combatId ? `No combat with id ${combatId}.` : "There is no combat. Start one first.");
+    return combat;
+  }
+
+  const hpOf = (actor) => {
+    const hp = actor.system?.attributes?.hp;
+    if (!hp) throw new Error(`${actor.name} has no hit points to change.`);
+    return { value: Number(hp.value ?? 0), temp: Number(hp.temp ?? 0), max: Number(hp.effectiveMax ?? hp.max ?? 0) };
+  };
+
   const commands = {
     async ping() {
       return { pong: true, time: Date.now() };
@@ -130,25 +164,7 @@ export function makeCommands(ctx) {
     },
 
     async encounters() {
-      return game.combats.contents.map((c) => ({
-        id: c.id,
-        uuid: c.uuid,
-        round: c.round,
-        turn: c.turn,
-        started: !!c.started,
-        active: !!c.active,
-        sceneId: c.scene?.id ?? c.sceneId ?? null,
-        combatants: c.combatants.contents.map((x) => ({
-          id: x.id,
-          uuid: x.uuid,
-          name: x.name,
-          actorId: x.actorId ?? null,
-          tokenId: x.tokenId ?? null,
-          initiative: x.initiative ?? null,
-          defeated: !!x.defeated,
-          hidden: !!x.hidden
-        }))
-      }));
+      return game.combats.contents.map(combatBrief);
     },
 
     async effects({ uuid } = {}) {
@@ -283,6 +299,73 @@ export function makeCommands(ctx) {
       if (activate) await scene.activate();
       else await scene.view();
       return { ...brief(scene), activated: !!activate };
+    },
+
+    async combatCreate({ sceneId, tokenUuids, rollInitiative, start } = {}) {
+      const scene = sceneId ? game.scenes.get(sceneId) : (game.scenes.viewed ?? game.scenes.active);
+      if (!scene) throw new Error(sceneId ? `No scene with id ${sceneId}.` : "No scene is showing.");
+      let combat = game.combats.contents.find((c) => (c.scene?.id ?? c.sceneId) === scene.id);
+      const madeNew = !combat;
+      if (!combat) combat = await docClass("Combat").create({ scene: scene.id, active: true });
+      const have = new Set(combat.combatants.contents.map((x) => x.tokenId));
+      const rows = [];
+      for (const uuid of tokenUuids ?? []) {
+        const token = await find(uuid);
+        if (token.documentName !== "Token") throw new Error(`${uuid} is not a token.`);
+        if (have.has(token.id)) continue;
+        have.add(token.id);
+        rows.push({ tokenId: token.id, sceneId: scene.id, actorId: token.actorId ?? token.actor?.id ?? null, hidden: !!token.hidden });
+      }
+      if (rows.length) await combat.createEmbeddedDocuments("Combatant", rows);
+      if (rollInitiative) await combat.rollAll();
+      if (start) await combat.startCombat();
+      return { created: madeNew, added: rows.length, combat: combatBrief(combat) };
+    },
+
+    async combatControl({ action, combatId } = {}) {
+      need(action, "action");
+      const methods = {
+        start: "startCombat", nextTurn: "nextTurn", previousTurn: "previousTurn", nextRound: "nextRound",
+        previousRound: "previousRound", rollAll: "rollAll", rollNpc: "rollNPC", end: "endCombat"
+      };
+      const method = methods[action];
+      if (!method) throw new Error(`Unknown combat action ${action}. Use one of: ${Object.keys(methods).join(", ")}.`);
+      const combat = pickCombat(combatId);
+      if (typeof combat[method] !== "function") throw new Error(`This Foundry cannot do ${action}.`);
+      const ended = { id: combat.id, uuid: combat.uuid };
+      await combat[method]();
+      return action === "end" ? { ended } : { action, combat: combatBrief(combat) };
+    },
+
+    async applyDamage({ uuid, amount, mode, type, multiplier } = {}) {
+      need(uuid, "uuid");
+      const n = Number(need(amount, "amount"));
+      if (!Number.isFinite(n) || n < 0) throw new Error("amount must be a number that is zero or more.");
+      const how = mode ?? "damage";
+      if (!["damage", "heal", "temp"].includes(how)) throw new Error(`Unknown mode ${how}. Use damage, heal or temp.`);
+      const doc = await find(uuid);
+      const actor = doc.documentName === "Actor" ? doc : doc.actor;
+      if (!actor) throw new Error(`${uuid} is not an actor or a token with an actor.`);
+      const before = hpOf(actor);
+      const options = multiplier !== undefined && multiplier !== null ? { multiplier: Number(multiplier) } : {};
+      if (how === "temp") {
+        await actor.update({ "system.attributes.hp.temp": Math.max(before.temp, Math.floor(n)) });
+      } else if (typeof actor.applyDamage === "function") {
+        // dnd5e handles resistances, immunities and temporary hit points for us.
+        const row = how === "heal" ? { value: n, type: "healing" } : (type ? { value: n, type: String(type) } : { value: n });
+        await actor.applyDamage([row], options);
+      } else if (how === "damage") {
+        const amountIn = Math.floor(n * (options.multiplier ?? 1));
+        const soaked = Math.min(before.temp, amountIn);
+        await actor.update({
+          "system.attributes.hp.temp": before.temp - soaked,
+          "system.attributes.hp.value": Math.max(0, before.value - (amountIn - soaked))
+        });
+      } else {
+        const healed = Math.floor(n * (options.multiplier ?? 1));
+        await actor.update({ "system.attributes.hp.value": Math.min(before.max || Infinity, before.value + healed) });
+      }
+      return { actor: brief(actor), mode: how, amount: n, before, after: hpOf(actor) };
     },
 
     async listFiles({ path, source } = {}) {

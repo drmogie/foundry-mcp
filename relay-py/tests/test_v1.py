@@ -320,3 +320,87 @@ async def test_bad_body_gets_plain_words(relay):
     r = await api.post("/api/v1/chat", json={"alias": "x"})
     assert r.status_code == 422 and "content" in r.json()["detail"]
     await api.aclose(); await web.aclose()
+
+
+# ----- stage 4: combat, damage, activity -----
+
+@pytest.mark.asyncio
+async def test_combat_and_damage_routes_send_the_right_command(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    async with Foundry(relay, key) as f:
+        r = await api.post("/api/v1/combat", json={"tokenUuids": ["Scene.s.Token.t1"], "rollInitiative": True, "start": True})
+        assert r.status_code == 200
+        for action in ("nextTurn", "rollAll"):
+            assert (await api.post("/api/v1/combat/control", json={"action": action})).status_code == 200
+        assert (await api.post("/api/v1/combat/control", json={"action": "end", "confirm": True, "combatId": "c1"})).status_code == 200
+        assert (await api.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": 7, "type": "fire"})).status_code == 200
+        assert (await api.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": 3, "mode": "heal"})).status_code == 200
+        assert f.seen == [
+            ("combatCreate", {"tokenUuids": ["Scene.s.Token.t1"], "rollInitiative": True, "start": True}),
+            ("combatControl", {"action": "nextTurn"}),
+            ("combatControl", {"action": "rollAll"}),
+            ("combatControl", {"action": "end", "combatId": "c1"}),
+            ("applyDamage", {"uuid": "Actor.a1", "amount": 7.0, "mode": "damage", "type": "fire"}),
+            ("applyDamage", {"uuid": "Actor.a1", "amount": 3.0, "mode": "heal"}),
+        ]
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_combat_mistakes_get_plain_words(relay):
+    web, key, api = await setup(relay, name="w", scope="write")
+    async with Foundry(relay, key) as f:
+        r = await api.post("/api/v1/combat/control", json={"action": "end"})
+        assert r.status_code == 400 and "confirm=true" in r.json()["detail"]
+        r = await api.post("/api/v1/combat/control", json={"action": "dance"})
+        assert r.status_code == 400 and "nextTurn" in r.json()["detail"]
+        r = await api.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": -2})
+        assert r.status_code == 400 and "heal" in r.json()["detail"]
+        r = await api.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": 2, "mode": "zap"})
+        assert r.status_code == 400
+        assert f.seen == []
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_read_token_cannot_fight(relay):
+    web, key, api = await setup(relay, name="r", scope="read")
+    async with Foundry(relay, key) as f:
+        assert (await api.post("/api/v1/combat", json={})).status_code == 403
+        assert (await api.post("/api/v1/combat/control", json={"action": "nextTurn"})).status_code == 403
+        assert (await api.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": 1})).status_code == 403
+        assert f.seen == []
+    await api.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_activity_log_records_writes_by_token(relay):
+    web, key, wapi = await setup(relay, name="writer", scope="write")
+    token = (await web.post("/api/tokens", json={"name": "reader", "scope": "read"})).json()["token"]
+    rapi = httpx.AsyncClient(base_url=f"http://{relay}", headers={"x-api-key": token})
+    async with Foundry(relay, key, errors={"applyDamage": "No hit points here."}) as f:
+        await rapi.get("/api/v1/world")  # reads are not logged
+        await wapi.post("/api/v1/chat", json={"content": "hi"})
+        await wapi.post("/api/v1/damage", json={"uuid": "Actor.a1", "amount": 4})
+        rows = (await rapi.get("/api/v1/activity")).json()["data"]
+        assert [r["kind"] for r in rows] == ["applyDamage", "sendChat"]  # newest first
+        assert rows[0]["ok"] is False and rows[0]["error"] == "No hit points here."
+        assert rows[1]["ok"] is True and rows[1]["token"] == "writer" and rows[1]["worldId"] == "mcp-test"
+        assert "content=hi" in rows[1]["summary"]
+        only = (await rapi.get("/api/v1/activity", params={"kind": "sendChat"})).json()["data"]
+        assert len(only) == 1
+        none = (await rapi.get("/api/v1/activity", params={"token": "reader"})).json()["data"]
+        assert none == []
+    await rapi.aclose(); await wapi.aclose(); await web.aclose()
+
+
+@pytest.mark.asyncio
+async def test_activity_needs_a_token_and_logs_blocked_writes(locked_relay):
+    web, key, api = await setup(locked_relay, name="w", scope="write")
+    anon = httpx.AsyncClient(base_url=f"http://{locked_relay}")
+    assert (await anon.get("/api/v1/activity")).status_code == 401
+    async with Foundry(locked_relay, key):
+        assert (await api.post("/api/v1/chat", json={"content": "hi"})).status_code == 403
+        rows = (await api.get("/api/v1/activity")).json()["data"]
+        assert rows[0]["ok"] is False and "not allowed" in rows[0]["error"]
+    await anon.aclose(); await api.aclose(); await web.aclose()

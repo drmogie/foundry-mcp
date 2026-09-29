@@ -1,6 +1,6 @@
 # FGA Relay
 
-Version: 2026.09.29.3
+Version: 2026.09.29.5
 
 Our own relay between Foundry VTT and tools like Claude.
 It is the REST API. The MCP server sits on top of it.
@@ -41,6 +41,12 @@ Write routes (write token, allowed worlds only):
 - POST /api/v1/items/use with `uuid` (and optional `targets`, `activityId`) uses an item.
 - POST /api/v1/tokens/move with `uuid`, `x`, `y` moves a token.
 - POST /api/v1/scene/switch with `id` or `name`, and optional `activate`.
+- POST /api/v1/combat makes a combat on the scene, or reuses the one there. Optional `tokenUuids`, `rollInitiative`, `start`.
+- POST /api/v1/combat/control with `action`: start, nextTurn, previousTurn, nextRound, previousRound, rollAll, rollNpc or end. End needs `confirm: true`.
+- POST /api/v1/damage with `uuid` (actor or token), `amount`, and optional `mode` (damage, heal or temp), `type` and `multiplier`. Uses the D&D 5e rules for resistance and temporary hit points.
+
+Read route for the log (any token):
+- GET /api/v1/activity?limit=50 lists the latest writes, newest first. Filter with `token` (a token name) or `kind`. It shows who, what, when, and any error. Reads are not logged. The log keeps the last 1000 entries in /data/activity.db.
 
 Answers look like `{"ok": true, "clientId": "...", "data": ...}`.
 Errors come back as `{"detail": "plain words"}`. A 400 means Foundry said no. A 502 means Foundry could not be reached.

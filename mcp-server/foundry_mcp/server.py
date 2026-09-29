@@ -405,6 +405,81 @@ async def foundry_move_token(
     )
 
 
+def _needs_fga() -> str | None:
+    if isinstance(client(), FgaClient):
+        return None
+    return "Error: this needs our own FGA relay. Use an fgat_ token. Nothing was changed."
+
+
+async def foundry_start_combat(
+    token_names: Annotated[list[str] | None, Field(description="Names of tokens on the scene to add.")] = None,
+    token_uuids: Annotated[list[str] | None, Field(description="Token uuids to add.")] = None,
+    all_tokens: Annotated[bool, Field(description="Add every token on the scene.")] = False,
+    roll_initiative: bool = True,
+    start: bool = True,
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Make a combat on the scene (or reuse the one there), add tokens, roll initiative and start it. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write(
+        "POST",
+        "/combat/create",
+        body={"tokenNames": token_names, "tokenUuids": token_uuids, "allTokens": all_tokens or None,
+              "rollInitiative": roll_initiative, "start": start, "sceneId": scene_id},
+    )
+
+
+async def foundry_combat_turn(
+    action: Annotated[
+        str,
+        Field(description="One of: start, nextTurn, previousTurn, nextRound, previousRound, rollAll, rollNpc, end."),
+    ],
+    combat_id: Annotated[str, Field(description="Defaults to the active combat.")] = "",
+    confirm: Annotated[bool, Field(description="Must be true for end. Ending removes the combat.")] = False,
+) -> str:
+    """Run the combat: start it, move the turn or round, roll initiative, or end it. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if action == "end" and not confirm:
+        return "Error: Ending combat removes it. Nothing ended. Call again with confirm=true to end it."
+    return await _write("POST", "/combat/control", body={"action": action, "combatId": combat_id, "confirm": confirm or None})
+
+
+async def foundry_apply_damage(
+    amount: float,
+    uuid: Annotated[str, Field(description="Actor or token uuid.")] = "",
+    name: Annotated[str, Field(description="Token name on the scene, if you have no uuid.")] = "",
+    mode: Annotated[str, Field(description="damage, heal or temp (temporary hit points).")] = "damage",
+    damage_type: Annotated[str, Field(description='For example "fire". Resistances then apply.')] = "",
+    multiplier: Annotated[float | None, Field(description="0.5 for half damage, 2 for double.")] = None,
+    scene_id: Annotated[str, Field(description="Defaults to the active scene. Used with name.")] = "",
+) -> str:
+    """Change hit points the way D&D 5e does, with temporary hit points and resistances. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if bool(uuid) == bool(name):
+        return "Error: give exactly one of uuid or name."
+    return await _write(
+        "POST",
+        "/damage",
+        body={"uuid": uuid, "name": name, "amount": amount, "mode": mode, "damageType": damage_type,
+              "multiplier": multiplier, "sceneId": scene_id},
+    )
+
+
+@mcp.tool()
+async def foundry_activity_log(
+    limit: Annotated[int, Field(ge=1, le=500)] = 20,
+    token: Annotated[str, Field(description="Only this API token's name.")] = "",
+    kind: Annotated[str, Field(description='Only this kind, like "sendChat" or "applyDamage".')] = "",
+) -> str:
+    """What each API token changed lately, newest first. Needs the FGA relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/activity", limit=limit, token=token, kind=kind)
+
+
 WRITE_TOOLS = (
     foundry_send_chat,
     foundry_roll,
@@ -414,6 +489,9 @@ WRITE_TOOLS = (
     foundry_switch_scene,
     foundry_use_item,
     foundry_move_token,
+    foundry_start_combat,
+    foundry_combat_turn,
+    foundry_apply_damage,
 )
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.09.29.5
+- Combat: make a combat, add tokens, roll initiative, start, next or previous turn and round, end.
+- Apply damage, healing or temporary hit points. Uses the D&D 5e rules.
+- Activity log: every write is recorded with the token name, world, result and any error. Read it at /api/v1/activity.
+- Blocked writes are logged too.
+- Needs FGA Relay Connect 2026.09.29.4 in Foundry.
+- Tests: 57 relay tests.
+
 ## 2026.09.29.4
 - Files: list folders and read files through Foundry (routes /files and /file).
 - Plain-words messages when a request has a mistake (422).

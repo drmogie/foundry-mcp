@@ -18,6 +18,7 @@ from . import __version__, auth
 from .hub import Client, Hub, HubError
 from .v1 import register_v1
 from .settings import Settings, load_connect_key, new_connect_key, session_secret
+from .activity import ActivityLog
 from .tokens import Token, TokenError, TokenStore
 
 log = logging.getLogger("fga-relay")
@@ -55,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     state: dict[str, Any] = {"connect_key": load_connect_key(settings)}
 
     tokens = TokenStore(settings.data_dir / "tokens.db")
+    activity = ActivityLog(settings.data_dir / "activity.db")
 
     app.state.settings = settings
     app.state.hub = hub
@@ -217,7 +219,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ----- REST API (API token) -----
 
-    register_v1(app, hub, settings, api_token, pick_client)
+    register_v1(app, hub, settings, api_token, pick_client, activity)
 
     @app.get("/api/v1/whoami")
     async def whoami(request: Request) -> dict[str, Any]:

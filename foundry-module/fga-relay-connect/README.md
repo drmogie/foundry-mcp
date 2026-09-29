@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.3
+Version: 2026.09.29.4
 
 Foundry module that links one browser to your own FGA Relay.
 
@@ -24,6 +24,11 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs
 
 ## Changelog
+### 2026.09.29.4
+- Combat: make a combat, add tokens, roll initiative, start, turns and rounds, end.
+- Apply damage, healing or temporary hit points.
+- 47 tests with a pretend Foundry.
+
 ### 2026.09.29.3
 - List folders and read files from Foundry data.
 - 40 tests with a pretend Foundry.

@@ -142,6 +142,7 @@ EXPECTED_TOOLS = {
     "foundry_get_effects",
     "foundry_list_files",
     "foundry_read_file",
+    "foundry_activity_log",
 }
 
 

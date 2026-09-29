@@ -67,6 +67,8 @@ class Relay:
             return ok([{"id": "u1", "name": "GM"}])
         if path == "/api/v1/chat" and method == "GET":
             return ok(self.chat[-int(q.get("limit", 20)):])
+        if path == "/api/v1/activity":
+            return ok([{"id": 2, "token": "writer", "kind": "sendChat", "summary": "sendChat content=hi", "ok": True}])
         if path == "/api/v1/encounters":
             return ok([])
         if path == "/api/v1/effects":
@@ -306,3 +308,70 @@ async def test_two_clients_need_an_id(monkeypatch):
                                                      transport=httpx.MockTransport(lambda r: httpx.Response(200, json=two))))
     out = await server.foundry_send_chat("hi")
     assert "More than one Foundry client" in out
+
+
+# ----- stage 4 -----
+
+async def test_activity_log_passes_filters(relay):
+    out = json.loads(await server.foundry_activity_log(limit=5, token="writer", kind="sendChat"))
+    assert out[0]["kind"] == "sendChat"
+    m, path, q, _b = last(relay)
+    assert (m, path) == ("GET", "/api/v1/activity")
+    assert q == {"limit": "5", "token": "writer", "kind": "sendChat"}
+
+
+async def test_start_combat_by_names(relay):
+    await server.foundry_start_combat(token_names=["bob", "Guard"])
+    m, path, _q, body = last(relay)
+    assert (m, path) == ("POST", "/api/v1/combat")
+    assert body == {"tokenUuids": ["Scene.s1.Token.t1", "Scene.s1.Token.t3", "Scene.s1.Token.t4"],
+                    "rollInitiative": True, "start": True}
+
+
+async def test_start_combat_all_tokens_and_plain_start(relay):
+    await server.foundry_start_combat(all_tokens=True, roll_initiative=False, start=False)
+    assert last(relay)[3]["tokenUuids"] == [f"Scene.s1.Token.t{i}" for i in (1, 2, 3, 4)]
+    assert last(relay)[3]["rollInitiative"] is False
+    await server.foundry_start_combat()
+    assert last(relay)[3] == {"rollInitiative": True, "start": True}
+
+
+async def test_start_combat_unknown_name_changes_nothing(relay):
+    out = await server.foundry_start_combat(token_names=["Nobody"])
+    assert "No token called nobody" in out and "Nothing was changed" in out
+    assert not any(c[0] == "POST" for c in relay.calls)
+
+
+async def test_combat_turn(relay):
+    await server.foundry_combat_turn("nextTurn")
+    m, path, _q, body = last(relay)
+    assert (m, path, body) == ("POST", "/api/v1/combat/control", {"action": "nextTurn", "confirm": False})
+
+
+async def test_ending_combat_needs_confirm(relay):
+    out = await server.foundry_combat_turn("end")
+    assert "confirm=true" in out
+    assert not any(c[0] == "POST" for c in relay.calls)
+    await server.foundry_combat_turn("end", combat_id="c1", confirm=True)
+    assert last(relay)[3] == {"action": "end", "combatId": "c1", "confirm": True}
+
+
+async def test_apply_damage_by_uuid_and_by_name(relay):
+    await server.foundry_apply_damage(7, uuid="Actor.a1", damage_type="fire", multiplier=0.5)
+    m, path, _q, body = last(relay)
+    assert (m, path) == ("POST", "/api/v1/damage")
+    assert body == {"uuid": "Actor.a1", "amount": 7, "mode": "damage", "type": "fire", "multiplier": 0.5}
+    await server.foundry_apply_damage(3, name="Foreman", mode="heal")
+    assert last(relay)[3] == {"uuid": "Scene.s1.Token.t2", "amount": 3, "mode": "heal"}
+    assert "exactly one" in await server.foundry_apply_damage(1)
+
+
+async def test_stage_4_tools_explain_when_not_on_our_relay(monkeypatch):
+    monkeypatch.setattr(server, "_client", RelayClient(base_url="http://relay", api_key="k"))
+    for out in (
+        await server.foundry_start_combat(),
+        await server.foundry_combat_turn("nextTurn"),
+        await server.foundry_apply_damage(1, uuid="Actor.a1"),
+        await server.foundry_activity_log(),
+    ):
+        assert "FGA relay" in out and "fgat_" in out

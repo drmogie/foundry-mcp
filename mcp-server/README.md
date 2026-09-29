@@ -24,6 +24,7 @@ Write tools exist, but they are off until you turn them on. See "Write tools" be
 - foundry_get_effects: active effects on an actor or token
 - foundry_list_files: files in Foundry's data folders
 - foundry_read_file: read one text file, such as a mod's module.json
+- foundry_activity_log: what each API token changed lately (our own relay only)
 
 ## Settings
 
@@ -51,7 +52,7 @@ The same tools work with our own relay. Nothing else changes.
 
 ## Write tools (optional, off by default)
 
-Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eight tools appear:
+Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eleven tools appear:
 
 - foundry_send_chat: post a chat message
 - foundry_roll: roll dice
@@ -61,6 +62,9 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Eight tools appear:
 - foundry_switch_scene: make a scene active
 - foundry_use_item: D&D 5e, make an actor use an item (good for testing mods)
 - foundry_move_token: move a token
+- foundry_start_combat: make a combat, add tokens, roll initiative, start (our own relay only)
+- foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true` (our own relay only)
+- foundry_apply_damage: damage, heal or temporary hit points with D&D 5e rules (our own relay only)
 
 Safety rules:
 

@@ -324,3 +324,129 @@ test("sendChat passes flavor through", async () => {
   await c.sendChat({ content: "Hi", flavor: "Test" });
   assert.equal(w.log.find((l) => l[0] === "chat")[1].flavor, "Test");
 });
+
+// ----- stage 4: combat and damage -----
+
+function fakeCombat(w, id = "c1", sceneId = "s1") {
+  const calls = [];
+  const combat = {
+    id, uuid: `Combat.${id}`, round: 0, turn: 0, started: false, active: true, scene: { id: sceneId },
+    combatants: { contents: [] },
+    async createEmbeddedDocuments(type, rows) {
+      calls.push(["addCombatants", type, rows]);
+      rows.forEach((r, i) => combat.combatants.contents.push({ id: `k${i}`, uuid: `k${i}u`, name: r.tokenId, tokenId: r.tokenId, actorId: r.actorId }));
+    },
+    async startCombat() { calls.push(["start"]); combat.started = true; combat.round = 1; },
+    async nextTurn() { calls.push(["nextTurn"]); combat.turn += 1; },
+    async previousTurn() { calls.push(["previousTurn"]); },
+    async nextRound() { calls.push(["nextRound"]); combat.round += 1; },
+    async previousRound() { calls.push(["previousRound"]); },
+    async rollAll() { calls.push(["rollAll"]); },
+    async rollNPC() { calls.push(["rollNpc"]); },
+    async endCombat() { calls.push(["end"]); w.game.combats.contents = []; }
+  };
+  w.game.combats.contents.push(combat);
+  w.game.combats.get = (x) => w.game.combats.contents.find((k) => k.id === x);
+  w.game.combats.active = combat;
+  return { combat, calls };
+}
+
+test("combatControl runs each action on the active combat", async () => {
+  const { w, c } = setup();
+  const { calls } = fakeCombat(w);
+  const start = await c.combatControl({ action: "start" });
+  assert.equal(start.combat.started, true);
+  await c.combatControl({ action: "nextTurn" });
+  await c.combatControl({ action: "rollNpc" });
+  const ended = await c.combatControl({ action: "end", combatId: "c1" });
+  assert.deepEqual(ended, { ended: { id: "c1", uuid: "Combat.c1" } });
+  assert.deepEqual(calls.map((x) => x[0]), ["start", "nextTurn", "rollNpc", "end"]);
+});
+
+test("combatControl explains mistakes", async () => {
+  const { w, c } = setup();
+  await assert.rejects(c.combatControl({ action: "nextTurn" }), /no combat/i);
+  fakeCombat(w);
+  await assert.rejects(c.combatControl({ action: "dance" }), /nextTurn/);
+  await assert.rejects(c.combatControl({ action: "nextTurn", combatId: "zzz" }), /No combat with id zzz/);
+  await assert.rejects(c.combatControl({}), /action is required/);
+});
+
+test("combatCreate makes a combat, adds tokens once, rolls and starts", async () => {
+  const { w, c } = setup();
+  w.makeDoc("Token", "t1", { name: "Bob", extra: { actorId: "a1" } });
+  w.makeDoc("Token", "t2", { name: "Foreman", extra: { actorId: "a2" } });
+  w.game.scenes.viewed = w.game.scenes[0];
+  let combat;
+  w.CONFIG.Combat.documentClass.create = async (data) => {
+    w.made.push(["Combat", data]);
+    ({ combat } = fakeCombat(w, "new1", data.scene));
+    return combat;
+  };
+  const r = await c.combatCreate({ tokenUuids: ["Token.t1", "Token.t2", "Token.t1"], rollInitiative: true, start: true });
+  assert.equal(r.created, true);
+  assert.equal(r.added, 2);
+  assert.deepEqual(w.made[0], ["Combat", { scene: "s1", active: true }]);
+  assert.equal(r.combat.started, true);
+  // A second call reuses the same combat and adds nobody twice.
+  const again = await c.combatCreate({ tokenUuids: ["Token.t1"] });
+  assert.equal(again.created, false);
+  assert.equal(again.added, 0);
+});
+
+test("combatCreate refuses things that are not tokens", async () => {
+  const { w, c } = setup();
+  w.game.scenes.viewed = w.game.scenes[0];
+  fakeCombat(w);
+  await assert.rejects(c.combatCreate({ tokenUuids: ["Actor.a1"] }), /not a token/);
+});
+
+function withHp(actor, hp) {
+  actor.system = { attributes: { hp: { ...hp } } };
+  actor.update = async (data) => {
+    for (const [k, v] of Object.entries(data)) actor.system.attributes.hp[k.split(".").pop()] = v;
+  };
+}
+
+test("applyDamage uses the system's own damage rules when it has them", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 30, temp: 0, max: 40 });
+  const seen = [];
+  bob.applyDamage = async (rows, opts) => { seen.push([rows, opts]); bob.system.attributes.hp.value -= rows[0].value; };
+  const r = await c.applyDamage({ uuid: "Actor.a1", amount: 7, type: "fire", multiplier: 0.5 });
+  assert.deepEqual(seen[0], [[{ value: 7, type: "fire" }], { multiplier: 0.5 }]);
+  assert.equal(r.before.value, 30);
+  assert.equal(r.after.value, 23);
+  await c.applyDamage({ uuid: "Actor.a1", amount: 3, mode: "heal" });
+  assert.deepEqual(seen[1], [[{ value: 3, type: "healing" }], {}]);
+});
+
+test("applyDamage falls back to plain hit point math", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 10, temp: 4, max: 12 });
+  let r = await c.applyDamage({ uuid: "Actor.a1", amount: 6 });
+  assert.deepEqual(r.after, { value: 8, temp: 0, max: 12 });
+  r = await c.applyDamage({ uuid: "Actor.a1", amount: 99 });
+  assert.equal(r.after.value, 0);
+  r = await c.applyDamage({ uuid: "Actor.a1", amount: 50, mode: "heal" });
+  assert.equal(r.after.value, 12);
+  r = await c.applyDamage({ uuid: "Actor.a1", amount: 5, mode: "temp" });
+  assert.equal(r.after.temp, 5);
+  r = await c.applyDamage({ uuid: "Actor.a1", amount: 2, mode: "temp" });
+  assert.equal(r.after.temp, 5); // temporary hit points do not stack
+});
+
+test("applyDamage works from a token and complains clearly", async () => {
+  const { w, c } = setup();
+  const bob = w.docs.get("Actor.a1");
+  withHp(bob, { value: 10, temp: 0, max: 12 });
+  w.makeDoc("Token", "t1", { name: "Bob", extra: { actor: bob } });
+  const r = await c.applyDamage({ uuid: "Token.t1", amount: 4 });
+  assert.equal(r.after.value, 6);
+  await assert.rejects(c.applyDamage({ uuid: "Actor.a1", amount: -1 }), /zero or more/);
+  await assert.rejects(c.applyDamage({ uuid: "Actor.a1", amount: 1, mode: "zap" }), /Unknown mode/);
+  await assert.rejects(c.applyDamage({ uuid: "Actor.a2", amount: 1 }), /no hit points/);
+  await assert.rejects(c.applyDamage({ uuid: "Scene.s1", amount: 1 }), /not an actor/);
+});

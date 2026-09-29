@@ -1,5 +1,5 @@
 name: FGA Relay
-version: "2026.09.29.4"
+version: "2026.09.29.5"
 slug: fga_relay
 image: ghcr.io/drmogie/{arch}-addon-fga-relay
 description: Our own REST API relay between Foundry VTT and tools like Claude. Easy setup, one login.

@@ -270,7 +270,35 @@ class FgaClient(RelayClient):
         if endpoint == "/move-token":
             uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
             return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": uuid, "x": b["x"], "y": b["y"]})
+        if endpoint == "/combat/create":
+            return await self._combat_create(b)
+        if endpoint == "/combat/control":
+            return await self._fga("POST", "/api/v1/combat/control", body={
+                "action": b.get("action"), "combatId": b.get("combatId"), "confirm": bool(b.get("confirm"))})
+        if endpoint == "/damage":
+            uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
+            return await self._fga("POST", "/api/v1/damage", body={
+                "uuid": uuid, "amount": b["amount"], "mode": b.get("mode") or "damage",
+                "type": b.get("damageType"), "multiplier": b.get("multiplier")})
         raise RelayError(f"The FGA relay does not have {endpoint} yet. Nothing was changed.")
+
+    async def _combat_create(self, b: dict[str, Any]) -> Any:
+        uuids = list(b.get("tokenUuids") or [])
+        if b.get("allTokens") or b.get("tokenNames"):
+            scene = await self._fga("GET", "/api/v1/scene", {"id": b.get("sceneId")})
+            tokens = scene["data"].get("tokens", [])
+            names = {str(n).lower() for n in b.get("tokenNames") or []}
+            picked = tokens if b.get("allTokens") else [t for t in tokens if str(t.get("name", "")).lower() in names]
+            missing = names - {str(t.get("name", "")).lower() for t in tokens}
+            if missing:
+                raise RelayError(f"No token called {', '.join(sorted(missing))} on scene {scene['data'].get('name')}. Nothing was changed.")
+            uuids += [f"Scene.{scene['id']}.Token.{t['_id']}" for t in picked]
+        return await self._fga("POST", "/api/v1/combat", body={
+            "sceneId": b.get("sceneId"), "tokenUuids": uuids or None,
+            "rollInitiative": bool(b.get("rollInitiative")), "start": bool(b.get("start"))})
+
+    async def _get_activity(self, limit: int = 20, token: str = "", kind: str = "") -> Any:
+        return await self._fga("GET", "/api/v1/activity", {"limit": limit, "token": token, "kind": kind})
 
     async def _update(self, uuid: str, data: dict[str, Any]) -> Any:
         """Foundry's own update cannot add embedded items or effects, so those become creates on the parent."""
