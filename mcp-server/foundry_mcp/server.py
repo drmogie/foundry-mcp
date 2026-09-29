@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
@@ -182,6 +184,98 @@ async def foundry_list_files(
 ) -> str:
     """List files in Foundry's file system. Use it to check a mod's files are installed."""
     return await _run("/file-system", path=path, source=source, recursive=recursive)
+
+
+@mcp.tool()
+async def foundry_read_file(
+    path: Annotated[str, Field(description="For example modules/fga-mount-action/module.json")],
+    max_chars: Annotated[int, Field(ge=100, le=200_000)] = 20_000,
+) -> str:
+    """Read one text file from Foundry (a mod's module.json, a script, a style sheet)."""
+    try:
+        raw, mime = await client().download(path)
+    except RelayError as exc:
+        return f"Error: {exc}"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return f"This looks like a binary file ({mime}, {len(raw)} bytes). It cannot be shown as text."
+    if len(text) > max_chars:
+        return text[:max_chars] + f"\n... cut off at {max_chars} of {len(text)} characters."
+    return text
+
+
+SKIP_DIRS = {".git", "node_modules", "__pycache__"}
+MAX_FILES = 300
+MAX_BYTES = 50 * 1024 * 1024
+
+
+def _safe_join(base: Path, *parts: str) -> Path:
+    """Join parts under base. Refuse anything that would land outside base."""
+    target = base.joinpath(*parts).resolve()
+    if target != base and base not in target.parents:
+        raise RelayError(f"Refusing to write outside the download folder: {'/'.join(parts)}")
+    return target
+
+
+async def foundry_download_folder(
+    path: Annotated[str, Field(description="Folder on the Foundry server, for example modules/fga-mount-action")],
+    dest: Annotated[str, Field(description="Sub-folder name inside the download folder. Default: the folder's own name.")] = "",
+) -> str:
+    """Copy a folder from the Foundry server to this computer, into the download folder only."""
+    base = Path(os.environ["FOUNDRY_DOWNLOAD_DIR"]).expanduser().resolve()
+    root = path.strip("/")
+    if not root:
+        return "Error: give a folder path, for example modules/fga-mount-action."
+    try:
+        target_root = _safe_join(base, dest or root.rsplit("/", 1)[-1])
+        saved: list[str] = []
+        total = 0
+        stack = [root]
+        while stack:
+            folder = stack.pop()
+            for item in await client().list_dir(folder):
+                name = str(item.get("name", ""))
+                item_path = str(item.get("path") or f"{folder}/{name}").strip("/")
+                if not name:
+                    continue
+                if item.get("type") == "directory":
+                    if name not in SKIP_DIRS:
+                        stack.append(item_path)
+                    continue
+                if len(saved) >= MAX_FILES:
+                    return _download_report(target_root, saved, total, f"Stopped at {MAX_FILES} files.")
+                raw, _mime = await client().download(item_path)
+                total += len(raw)
+                if total > MAX_BYTES:
+                    return _download_report(target_root, saved, total, "Stopped: over the 50 MB limit.")
+                rel = item_path[len(root):].lstrip("/")
+                out = _safe_join(target_root, *rel.split("/"))
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(raw)
+                saved.append(rel)
+    except RelayError as exc:
+        return f"Error: {exc}"
+    return _download_report(target_root, saved, total, "")
+
+
+def _download_report(target: Path, saved: list[str], total: int, note: str) -> str:
+    lines = [f"Saved {len(saved)} files ({total} bytes) to {target}"]
+    if note:
+        lines.append(note)
+    lines.extend(saved[:40])
+    if len(saved) > 40:
+        lines.append(f"... and {len(saved) - 40} more")
+    return "\n".join(lines)
+
+
+def register_download_tool() -> None:
+    """Opt-in. Only offered when FOUNDRY_DOWNLOAD_DIR is set, and it can only write inside it."""
+    mcp.tool()(foundry_download_folder)
+
+
+if os.environ.get("FOUNDRY_DOWNLOAD_DIR"):
+    register_download_tool()
 
 
 def main() -> None:

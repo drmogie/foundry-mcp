@@ -1,10 +1,10 @@
 # Foundry MCP server
 
-Version: 2026.09.28.06
+Version: 2026.09.28.07
 
 Lets Claude read a Foundry VTT world.
 It talks to the ThreeHats relay add-on.
-This first version is read-only. Nothing here changes your world.
+This version is read-only. Nothing here changes your world.
 
 ## Tools
 
@@ -22,6 +22,7 @@ This first version is read-only. Nothing here changes your world.
 - foundry_list_macros: macros
 - foundry_get_effects: active effects on an actor or token
 - foundry_list_files: files in Foundry's data folders
+- foundry_read_file: read one text file, such as a mod's module.json
 
 ## Settings
 
@@ -31,7 +32,23 @@ Set these as environment variables.
 - FOUNDRY_RELAY_URL: the relay address. Default is `http://ha-pi4:3010`.
 - FOUNDRY_CLIENT_ID: which world to use. Leave it empty when only one world is online.
 
+- FOUNDRY_DOWNLOAD_DIR (optional): turns on one extra tool, described below.
+
 Tip: make a scoped key on the relay dashboard with read scopes only.
+
+## Copy a mod folder to your computer (optional)
+
+Set FOUNDRY_DOWNLOAD_DIR to a folder on your computer.
+Example: `C:\Users\YOU\Downloads`.
+That turns on `foundry_download_folder`.
+
+- It copies a folder from the Foundry server, like `modules/fga-mount-action`.
+- It only writes inside FOUNDRY_DOWNLOAD_DIR. It refuses any path that tries to leave it.
+- It skips `.git` and `node_modules`.
+- It stops at 300 files or 50 MB.
+- Leave FOUNDRY_DOWNLOAD_DIR unset and the tool does not exist.
+
+It does not change Foundry. It only copies files out.
 
 ## Add it to Claude Code
 

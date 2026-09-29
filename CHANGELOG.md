@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.09.28.07
+- New tool: `foundry_read_file` (read a text file from Foundry).
+- New opt-in tool: `foundry_download_folder`. Only exists when `FOUNDRY_DOWNLOAD_DIR` is set. Writes only inside that folder.
+- 25 tests pass.
+
 ## 2026.09.28.06
 - Install docs now use a zip link, so Git is not needed on the computer.
 

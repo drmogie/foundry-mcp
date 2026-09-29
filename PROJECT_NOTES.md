@@ -41,3 +41,10 @@
 
 - Claude Desktop log showed `Git executable not found` on the user's Windows PC.
 - `uvx --from https://github.com/drmogie/foundry-mcp/archive/refs/heads/main.zip#subdirectory=mcp-server` works without Git. Tested with a stripped PATH.
+
+## 2026-09-28: file tools (2026.09.28.07)
+
+- `/download` needs `format=base64`. The module fetches the path as a Foundry route (`modules/x/file`) and ignores `source`.
+- Reply has `fileData` as a data URL, plus `mimeType`.
+- `foundry_download_folder` walks one folder level at a time with `/file-system` (recursive reply shape is unverified), then downloads each file.
+- Not yet run against the live relay.

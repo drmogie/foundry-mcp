@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 from typing import Any
@@ -105,6 +106,27 @@ class RelayClient:
             elif isinstance(value, (list, dict)):
                 params[key] = json.dumps(value)
         return await self._request(endpoint, params)
+
+    async def list_dir(self, path: str, source: str = "data") -> list[dict[str, Any]]:
+        """One folder level: a list of {name, path, type} where type is directory or file."""
+        data = await self.get("/file-system", path=path, source=source, recursive=False)
+        items = data.get("results") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            raise RelayError(f"Could not read the folder list for {path}.")
+        return [i for i in items if isinstance(i, dict)]
+
+    async def download(self, path: str, source: str = "data") -> tuple[bytes, str]:
+        """Fetch one file from Foundry. Returns (bytes, mime type)."""
+        data = await self.get("/download", path=path, source=source, format="base64")
+        blob = data.get("fileData") if isinstance(data, dict) else None
+        if not isinstance(blob, str) or not blob:
+            raise RelayError(f"Foundry sent no file data for {path}.")
+        b64 = blob.split(",", 1)[1] if blob.startswith("data:") and "," in blob else blob
+        try:
+            raw = base64.b64decode(b64)
+        except ValueError as exc:
+            raise RelayError(f"The file data for {path} was not valid base64.") from exc
+        return raw, str(data.get("mimeType") or "application/octet-stream")
 
 
 def to_text(data: Any) -> str:

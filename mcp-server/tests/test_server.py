@@ -1,3 +1,5 @@
+import base64
+
 import httpx
 import pytest
 
@@ -139,6 +141,7 @@ EXPECTED_TOOLS = {
     "foundry_list_macros",
     "foundry_get_effects",
     "foundry_list_files",
+    "foundry_read_file",
 }
 
 
@@ -164,3 +167,128 @@ async def test_structure_and_files_pass_a_path_param(use_client, calls):
     await server.foundry_list_files(path="modules/fga-mount-action", source="data")
     assert calls[-1].url.path == "/file-system"
     assert calls[-1].url.params["path"] == "modules/fga-mount-action"
+
+
+# ---- file tools -------------------------------------------------------------
+
+TREE = {
+    "modules/mymod": [
+        {"name": "module.json", "path": "modules/mymod/module.json", "type": "file"},
+        {"name": "scripts", "path": "modules/mymod/scripts", "type": "directory"},
+        {"name": "node_modules", "path": "modules/mymod/node_modules", "type": "directory"},
+        {"name": ".git", "path": "modules/mymod/.git", "type": "directory"},
+    ],
+    "modules/mymod/scripts": [
+        {"name": "main.js", "path": "modules/mymod/scripts/main.js", "type": "file"},
+        {"name": "logo.png", "path": "modules/mymod/scripts/logo.png", "type": "file"},
+    ],
+    "modules/mymod/node_modules": [
+        {"name": "skip.js", "path": "modules/mymod/node_modules/skip.js", "type": "file"},
+    ],
+}
+FILES = {
+    "modules/mymod/module.json": b'{"id": "mymod", "version": "1"}',
+    "modules/mymod/scripts/main.js": b"console.log('hi');",
+    "modules/mymod/scripts/logo.png": bytes([0x89, 0x50, 0x4E, 0x47, 0xFF, 0xFE, 0x00]),
+    "modules/mymod/node_modules/skip.js": b"nope",
+}
+
+
+def file_relay(monkeypatch, tree=TREE, files=FILES):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        q = request.url.params
+        if request.url.path == "/file-system":
+            seen.append(("list", q["path"]))
+            return httpx.Response(200, json={"success": True, "results": tree.get(q["path"], [])})
+        if request.url.path == "/download":
+            seen.append(("get", q["path"]))
+            assert q["format"] == "base64"
+            body = files.get(q["path"])
+            if body is None:
+                return httpx.Response(400, json={"error": "Failed to download file: 404 Not Found"})
+            b64 = base64.b64encode(body).decode()
+            return httpx.Response(
+                200,
+                json={"success": True, "fileData": f"data:application/octet-stream;base64,{b64}", "mimeType": "text/plain"},
+            )
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(server, "_client", make_client(handler, client_id="c"))
+    return seen
+
+
+async def test_read_file_text(monkeypatch):
+    file_relay(monkeypatch)
+    out = await server.foundry_read_file("modules/mymod/module.json")
+    assert out == '{"id": "mymod", "version": "1"}'
+
+
+async def test_read_file_binary_is_not_dumped(monkeypatch):
+    file_relay(monkeypatch)
+    out = await server.foundry_read_file("modules/mymod/scripts/logo.png")
+    assert "binary file" in out
+
+
+async def test_read_file_truncates(monkeypatch):
+    file_relay(monkeypatch, files={"modules/big.txt": b"a" * 5000})
+    out = await server.foundry_read_file("modules/big.txt", max_chars=1000)
+    assert "cut off at 1000 of 5000" in out
+
+
+async def test_read_file_missing(monkeypatch):
+    file_relay(monkeypatch)
+    out = await server.foundry_read_file("modules/nope.txt")
+    assert out.startswith("Error:") and "404" in out
+
+
+async def test_download_folder_copies_and_skips(monkeypatch, tmp_path):
+    seen = file_relay(monkeypatch)
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(tmp_path))
+    out = await server.foundry_download_folder("modules/mymod")
+    root = tmp_path / "mymod"
+    assert (root / "module.json").read_bytes() == FILES["modules/mymod/module.json"]
+    assert (root / "scripts" / "main.js").exists()
+    assert (root / "scripts" / "logo.png").read_bytes() == FILES["modules/mymod/scripts/logo.png"]
+    assert not (root / "node_modules").exists()
+    assert ("get", "modules/mymod/node_modules/skip.js") not in seen
+    assert "Saved 3 files" in out
+
+
+async def test_download_folder_custom_dest(monkeypatch, tmp_path):
+    file_relay(monkeypatch)
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(tmp_path))
+    await server.foundry_download_folder("modules/mymod", dest="D&D mods/mymod")
+    assert (tmp_path / "D&D mods" / "mymod" / "module.json").exists()
+
+
+async def test_download_folder_refuses_to_escape(monkeypatch, tmp_path):
+    file_relay(monkeypatch)
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(tmp_path / "safe"))
+    (tmp_path / "safe").mkdir()
+    out = await server.foundry_download_folder("modules/mymod", dest="../outside")
+    assert "Refusing" in out
+    assert not (tmp_path / "outside").exists()
+
+
+async def test_download_folder_blocks_dotdot_file_names(monkeypatch, tmp_path):
+    tree = {"modules/evil": [{"name": "x", "path": "modules/evil/../../x", "type": "file"}]}
+    file_relay(monkeypatch, tree=tree, files={"modules/evil/../../x": b"boom"})
+    base = tmp_path / "safe"
+    base.mkdir()
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(base))
+    out = await server.foundry_download_folder("modules/evil")
+    assert "Refusing" in out
+    assert list(tmp_path.rglob("x")) == []
+
+
+async def test_download_folder_needs_a_path(monkeypatch, tmp_path):
+    file_relay(monkeypatch)
+    monkeypatch.setenv("FOUNDRY_DOWNLOAD_DIR", str(tmp_path))
+    assert "give a folder path" in await server.foundry_download_folder("/")
+
+
+async def test_download_tool_is_off_by_default():
+    names = {t.name for t in await server.mcp.list_tools()}
+    assert "foundry_download_folder" not in names
