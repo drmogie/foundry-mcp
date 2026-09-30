@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.29.14
+- mcp-server 2026.09.29.13 only. `foundry_attack` now spots a new attack by watching chat for a new attack roll, so two identical rolls in a row no longer look like "no new roll".
+
 ## 2026.09.29.13
 - mcp-server 2026.09.29.12 only. `foundry_attack` now waits until Foundry has worked out hit or miss, instead of reading a blank answer as a miss. It says so when a target is missing.
 

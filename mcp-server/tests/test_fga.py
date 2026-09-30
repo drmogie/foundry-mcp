@@ -508,6 +508,7 @@ class AttackRelay(Relay):
         super().__init__()
         self.actor_type, self.outcome, self.damage, self.pending, self.ready = actor_type, outcome, damage, pending, ready
         self.blank_polls = blank_polls
+        self.rolls = 0
         self.used = False
 
     def __call__(self, request):
@@ -521,8 +522,14 @@ class AttackRelay(Relay):
         if path == "/api/v1/items/use":
             self.calls.append((request.method, path, dict(request.url.params), json.loads(request.content)))
             self.used = True
+            if self.ready:
+                self.rolls += 1
+                self.chat.append({"id": "roll%d" % self.rolls, "timestamp": 9, "alias": "Bob", "content": "", "whisper": [], "rolls": [{"formula": "1d20", "total": 21}], "flavor": "Shortbow - Attack Roll"})
             body = json.loads(request.content)
             return httpx.Response(200, json={"ok": True, "data": {"used": {"name": "Shortbow"}, "targets": body.get("targets") or []}})
+        if path == "/api/v1/chat" and request.method == "GET":
+            self.calls.append((request.method, path, dict(request.url.params), None))
+            return httpx.Response(200, json={"ok": True, "data": list(self.chat)})
         if path == "/api/v1/last-attack":
             self.calls.append((request.method, path, dict(request.url.params), None))
             if not (self.used and self.ready):
@@ -623,3 +630,12 @@ async def test_attack_that_never_gets_a_hit_or_miss_says_so(attack_relay):
     r = attack_relay(actor_type="npc", blank_polls=99)
     out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", wait_seconds=3))
     assert out["applied"] is False and "no hit or miss" in out["note"] and _damage_calls(r) == []
+
+
+async def test_attack_notices_a_new_roll_even_when_the_numbers_repeat(attack_relay):
+    """Two attacks in a row that come out the same must both count."""
+    r = attack_relay(actor_type="npc")
+    first = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert first["applied"] is True
+    second = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert second["applied"] is True and len(_damage_calls(r)) == 2

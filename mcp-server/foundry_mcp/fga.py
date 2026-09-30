@@ -415,6 +415,20 @@ class FgaClient(RelayClient):
         except RelayError:
             return None
 
+    async def _chat_rows(self) -> list[dict[str, Any]]:
+        try:
+            rows = await self._fga("GET", "/api/v1/chat", {"limit": 40})
+        except RelayError:
+            return []
+        return rows if isinstance(rows, list) else []
+
+    @staticmethod
+    def _new_attack_roll(rows: list[dict[str, Any]], since_id: str | None) -> bool:
+        """True when chat holds an attack roll posted after the message with since_id."""
+        ids = [r.get("id") for r in rows]
+        fresh = rows[ids.index(since_id) + 1:] if since_id in ids else rows
+        return any(r.get("rolls") and "attack" in str(r.get("flavor") or "").lower() for r in fresh)
+
     async def _attack(self, b: dict[str, Any]) -> Any:
         """Use a weapon or spell, wait for the damage roll, and apply it when this kind of attacker is switched on."""
         actor_uuid = b["actorUuid"]
@@ -423,7 +437,8 @@ class FgaClient(RelayClient):
         alias = str(actor.get("name") or "")
         kind = "player" if actor.get("type") == "character" else "npc"
         apply_it = bool(b.get("applyPlayers") if kind == "player" else b.get("applyNpcs"))
-        before = await self._latest_attack(alias)
+        rows = await self._chat_rows()
+        since_id = rows[-1].get("id") if rows else None
         used = await self._use_item({**b, "abilityUuid": item_uuid})
         targets = used.get("targets") if isinstance(used, dict) else None
         target = targets[0] if targets else None
@@ -431,15 +446,18 @@ class FgaClient(RelayClient):
         seen: Any = None
         for _ in range(int(b.get("waitSeconds") or 15)):
             await asyncio.sleep(1.0)
+            if not self._new_attack_roll(await self._chat_rows(), since_id):
+                seen = None
+                continue
             seen = await self._latest_attack(alias)
-            if not seen or seen == before or not seen.get("attack"):
+            if not seen or not seen.get("attack"):
                 continue
             if not seen.get("outcome"):
                 continue  # the roll is in chat, but hit or miss is not worked out yet
             if seen.get("outcome") in ("hit", "critical hit") and seen.get("pending"):
                 continue
             break
-        if not seen or seen == before or not seen.get("attack"):
+        if not seen or not seen.get("attack"):
             result["note"] = "No new attack roll showed up in chat. Nothing was applied."
             return result
         outcome = str(seen.get("outcome") or "")
