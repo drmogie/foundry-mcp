@@ -434,15 +434,19 @@ class FgaClient(RelayClient):
             seen = await self._latest_attack(alias)
             if not seen or seen == before or not seen.get("attack"):
                 continue
+            if not seen.get("outcome"):
+                continue  # the roll is in chat, but hit or miss is not worked out yet
             if seen.get("outcome") in ("hit", "critical hit") and seen.get("pending"):
                 continue
             break
-        else:
-            seen = seen if seen and seen != before else None
         if not seen or seen == before or not seen.get("attack"):
             result["note"] = "No new attack roll showed up in chat. Nothing was applied."
             return result
         outcome = str(seen.get("outcome") or "")
+        if not outcome:
+            result["attackTotal"] = (seen.get("attack") or {}).get("total")
+            result["note"] = "The attack rolled, but Foundry gave no hit or miss. Is a target set? Nothing was applied."
+            return result
         result.update({"target": seen.get("target"), "outcome": outcome, "attackTotal": (seen.get("attack") or {}).get("total"), "ac": seen.get("ac")})
         if outcome not in ("hit", "critical hit"):
             result["note"] = "The attack missed. No damage."

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.29.13
+- mcp-server 2026.09.29.12 only. `foundry_attack` now waits until Foundry has worked out hit or miss, instead of reading a blank answer as a miss. It says so when a target is missing.
+
 ## 2026.09.29.12
 - mcp-server 2026.09.29.11 only. Relay and module are unchanged (relay 2026.09.29.12, module 2026.09.29.12).
 - New tool `foundry_attack`: attack in one step, wait for the damage roll, and apply it. Separate switches for players and non-players (`apply_for_players`, `apply_for_npcs`, or the environment variables `FOUNDRY_MCP_APPLY_PLAYER_HITS` and `FOUNDRY_MCP_APPLY_NPC_HITS`).

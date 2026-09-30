@@ -504,9 +504,10 @@ def test_all_new_write_tools_are_offered_when_writes_are_on():
 class AttackRelay(Relay):
     """Adds a use-item answer, a last-attack answer that changes after the use, and a damage answer."""
 
-    def __init__(self, actor_type="character", outcome="hit", damage=8, pending=False, ready=True):
+    def __init__(self, actor_type="character", outcome="hit", damage=8, pending=False, ready=True, blank_polls=0):
         super().__init__()
         self.actor_type, self.outcome, self.damage, self.pending, self.ready = actor_type, outcome, damage, pending, ready
+        self.blank_polls = blank_polls
         self.used = False
 
     def __call__(self, request):
@@ -526,6 +527,9 @@ class AttackRelay(Relay):
             self.calls.append((request.method, path, dict(request.url.params), None))
             if not (self.used and self.ready):
                 return httpx.Response(200, json={"ok": True, "data": {"attack": {"total": 3}, "outcome": "miss", "target": "Old", "ac": 10, "damage": None, "pending": False}})
+            if self.blank_polls > 0:
+                self.blank_polls -= 1
+                return httpx.Response(200, json={"ok": True, "data": {"attack": {"total": 21}, "outcome": "", "target": None, "ac": None, "damage": None, "pending": False}})
             dmg = None if self.pending else ({"total": self.damage} if self.outcome != "miss" else None)
             return httpx.Response(200, json={"ok": True, "data": {"attack": {"total": 21}, "outcome": self.outcome, "target": "Foreman", "ac": 18, "damage": dmg, "pending": self.pending and self.outcome != "miss"}})
         if path == "/api/v1/damage":
@@ -607,3 +611,15 @@ async def test_attack_needs_one_item_and_a_known_item(attack_relay):
     assert "exactly one" in await server.foundry_attack("Actor.a1")
     out = await server.foundry_attack("Actor.a1", ability_name="Banana")
     assert out.startswith("Error:") and "no item called Banana" in out
+
+
+async def test_attack_waits_while_hit_or_miss_is_blank(attack_relay):
+    r = attack_relay(actor_type="npc", blank_polls=3)
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert out["outcome"] == "hit" and out["applied"] is True and len(_damage_calls(r)) == 1
+
+
+async def test_attack_that_never_gets_a_hit_or_miss_says_so(attack_relay):
+    r = attack_relay(actor_type="npc", blank_polls=99)
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", wait_seconds=3))
+    assert out["applied"] is False and "no hit or miss" in out["note"] and _damage_calls(r) == []
