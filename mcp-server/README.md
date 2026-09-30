@@ -1,11 +1,20 @@
 # Foundry MCP server
 
-Version: 2026.09.29.13
+Version: 2026.09.29.14
 
 Lets Claude read a Foundry VTT world.
 It talks to the Foundry VTT MCP & Rest Relay add-on.
 By default it is read-only. Nothing changes your world.
 Write tools exist, but they are off until you turn them on. See "Write tools" below.
+
+## New in 2026.09.29.14
+- `foundry_status`: hit points, bloodied or down, positions, combats and whose turn, and the latest chat id.
+- `foundry_distance`: feet between two tokens. A diagonal counts as one square.
+- `foundry_move_adjacent` and `foundry_move_away`: walk a token next to a target, or step it back.
+- `foundry_wait_for_player`: waits until a player says done, the turn changes, or they go quiet after their last roll.
+- `foundry_apply_hits`: takes a player's hits off their targets, read from chat. Each damage roll is applied once.
+- `foundry_rest_all` and `foundry_end_all_combats`.
+- `foundry_attack` checks reach and range, sets disadvantage for a close ranged attack, and takes `attacks`, `advantage` and `disadvantage`.
 
 ## Tools
 

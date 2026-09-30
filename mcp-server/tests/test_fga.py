@@ -496,7 +496,7 @@ def test_all_new_write_tools_are_offered_when_writes_are_on():
                  "foundry_add_token", "foundry_set_token", "foundry_create_journal", "foundry_roll_table", "foundry_import_from_pack",
                  "foundry_attack"):
         assert want in names
-    assert len(names) == 23
+    assert len(names) == 28
 
 
 # ----- attack in one step, players and non-players split -----
@@ -639,3 +639,21 @@ async def test_attack_notices_a_new_roll_even_when_the_numbers_repeat(attack_rel
     assert first["applied"] is True
     second = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
     assert second["applied"] is True and len(_damage_calls(r)) == 2
+
+
+async def test_attack_can_swing_several_times_and_sets_advantage(attack_relay):
+    r = attack_relay(actor_type="character")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", apply_for_players=True, attacks=2, advantage=True))
+    assert len(out["attacks"]) == 2 and out["totalDamage"] == 16
+    assert len(_damage_calls(r)) == 2
+    uses = [c[3] for c in r.calls if c[1] == "/api/v1/items/use"]
+    assert len(uses) == 2 and all(u["advantage"] is True for u in uses)
+    assert all(a["rollMode"] == "advantage" for a in out["attacks"])
+
+
+async def test_attack_advantage_and_disadvantage_cancel(attack_relay):
+    r = attack_relay(actor_type="npc")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", advantage=True, disadvantage=True))
+    body = [c[3] for c in r.calls if c[1] == "/api/v1/items/use"][0]
+    assert "advantage" not in body and "disadvantage" not in body
+    assert "rollMode" not in out

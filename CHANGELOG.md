@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.09.29.16
+- Relay 2026.09.29.13, module 2026.09.29.14, mcp-server 2026.09.29.14. Update all three for advantage and disadvantage. Everything else below works with the mcp-server alone.
+- New read tools: `foundry_status` (hit points, bloodied, positions, combats, whose turn), `foundry_distance` (feet between two tokens), `foundry_wait_for_player` (waits for a player to finish a turn).
+- New write tools: `foundry_move_adjacent`, `foundry_move_away`, `foundry_apply_hits` (applies a player's hits from chat, once each), `foundry_rest_all`, `foundry_end_all_combats`.
+- `foundry_attack` checks reach and range from the board and will not roll when the target is out of reach. It gives a ranged attack disadvantage when the target is within 5 ft or past normal range. New options: `attacks`, `advantage`, `disadvantage`, `ignore_distance`, `auto_disadvantage`.
+- `foundry_combat_turn` will not guess when more than one combat exists. Pass `combat_id`.
+- A read that times out is tried once more. So are safe writes: move token, rest, target, switch scene.
+
 ## 2026.09.29.15
 - Module 2026.09.29.13 only. Relay and mcp-server are unchanged. Attacks made through the tool no longer open the system's Attack Roll box on the GM screen. The module rolls a lone attack activity itself with no dialog.
 

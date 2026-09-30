@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from .client import RelayClient, RelayError, write_allowed_worlds
+from . import tactics
 
 DEFAULT_FGA_URL = "https://rest-relay.mogie.io"
 SEARCH_TYPES = ["Actor", "Item", "Scene", "JournalEntry", "Macro", "RollTable", "Playlist"]
@@ -25,6 +26,7 @@ def _last(path: str) -> str:
 class FgaClient(RelayClient):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self._applied: set[str] = set()
         import os
 
         if not (kwargs.get("base_url") or os.environ.get("FOUNDRY_RELAY_URL")):
@@ -42,7 +44,18 @@ class FgaClient(RelayClient):
             return str(body.get("detail") or body.get("error") or body)[:400]
         return str(body)[:400]
 
-    async def _fga(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> Any:
+    async def _fga(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None, retry: bool | None = None) -> Any:
+        """One call to the relay. A timed-out read is tried once more. A write is only tried again when the caller says it is safe to repeat."""
+        again = (method == "GET") if retry is None else retry
+        try:
+            return await self._fga_once(method, path, params, body)
+        except RelayError as exc:
+            if not (again and str(exc).startswith("The relay did not answer in time")):
+                raise
+            await asyncio.sleep(1.0)
+            return await self._fga_once(method, path, params, body)
+
+    async def _fga_once(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> Any:
         if not self.api_key:
             raise RelayError("No API token. Set FOUNDRY_API_KEY to a token from the Rest Relay page (it starts with fgat_).")
         query = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
@@ -265,17 +278,27 @@ class FgaClient(RelayClient):
         if endpoint == "/delete":
             return await self._fga("DELETE", "/api/v1/document", {"uuid": p["uuid"], "confirm": True})
         if endpoint == "/switch-scene":
-            return await self._fga("POST", "/api/v1/scene/switch", body={"id": b.get("sceneId"), "name": b.get("name"), "activate": True})
+            return await self._fga("POST", "/api/v1/scene/switch", body={"id": b.get("sceneId"), "name": b.get("name"), "activate": True}, retry=True)
         if endpoint == "/dnd5e/use-item":
             return await self._use_item(b)
         if endpoint == "/dnd5e/attack":
             return await self._attack(b)
+        if endpoint == "/tactics/move-adjacent":
+            return await self._move_adjacent(b)
+        if endpoint == "/tactics/move-away":
+            return await self._move_away(b)
+        if endpoint == "/tactics/apply-hits":
+            return await self._apply_hits(b)
+        if endpoint == "/rest-all":
+            return await self._rest_all(b)
+        if endpoint == "/combat/end-all":
+            return await self._end_all_combats()
         if endpoint == "/move-token":
             uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
-            return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": uuid, "x": b["x"], "y": b["y"]})
+            return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": uuid, "x": b["x"], "y": b["y"]}, retry=True)
         if endpoint == "/rest":
             uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
-            return await self._fga("POST", "/api/v1/rest", body={"uuid": uuid, "type": b.get("type") or "long", "hitDice": b.get("hitDice") or None})
+            return await self._fga("POST", "/api/v1/rest", body={"uuid": uuid, "type": b.get("type") or "long", "hitDice": b.get("hitDice") or None}, retry=not b.get("hitDice"))
         if endpoint == "/combat/create":
             return await self._combat_create(b)
         if endpoint == "/combat/control":
@@ -308,7 +331,7 @@ class FgaClient(RelayClient):
             uuids = list(b.get("uuids") or [])
             for n in b.get("names") or []:
                 uuids.append(await self._token_uuid(n, b.get("sceneId")))
-            return await self._fga("POST", "/api/v1/target", body={"uuids": uuids})
+            return await self._fga("POST", "/api/v1/target", body={"uuids": uuids}, retry=True)
         if endpoint == "/tokens/create":
             return await self._fga("POST", "/api/v1/tokens", body={
                 "actorUuid": b["actorUuid"], "sceneId": b.get("sceneId"), "x": b.get("x"), "y": b.get("y"),
@@ -429,7 +452,7 @@ class FgaClient(RelayClient):
         fresh = rows[ids.index(since_id) + 1:] if since_id in ids else rows
         return any(r.get("rolls") and "attack" in str(r.get("flavor") or "").lower() for r in fresh)
 
-    async def _attack(self, b: dict[str, Any]) -> Any:
+    async def _attack_once(self, b: dict[str, Any]) -> Any:
         """Use a weapon or spell, wait for the damage roll, and apply it when this kind of attacker is switched on."""
         actor_uuid = b["actorUuid"]
         actor = await self._actor_data(actor_uuid)
@@ -489,6 +512,270 @@ class FgaClient(RelayClient):
             result["hp"] = {"before": (hit.get("before") or {}).get("value"), "after": (hit.get("after") or {}).get("value"), "max": (hit.get("after") or {}).get("max")}
         return result
 
+
+    # ----- the board: distance, movement, status, watching the table -----
+
+    async def _scene(self, scene_id: str | None = None) -> tuple[str, dict[str, Any]]:
+        scene = await self._fga("GET", "/api/v1/scene", {"id": scene_id or None})
+        return str(scene["id"]), scene["data"]
+
+    @staticmethod
+    def _pick_token(tokens: list[dict[str, Any]], name: str = "", uuid: str = "", what: str = "token") -> dict[str, Any]:
+        """One token on the scene, by name or by uuid. An actor uuid works when only one token uses that actor."""
+        if bool(name) == bool(uuid):
+            raise RelayError(f"Give exactly one of a name or a uuid for the {what}.")
+        if uuid:
+            last = str(uuid).rsplit(".", 1)[-1]
+            hits = [t for t in tokens if t.get("_id") == last] or (
+                [t for t in tokens if t.get("actorId") == last] if str(uuid).startswith("Actor.") else [])
+        else:
+            hits = [t for t in tokens if t.get("name") == name]
+        if not hits:
+            raise RelayError(f"No {what} '{name or uuid}' on the scene.")
+        if len(hits) > 1:
+            raise RelayError(f"{len(hits)} tokens match '{name or uuid}'. Use a token uuid.")
+        return hits[0]
+
+    async def _get_distance(self, fromName: str = "", fromUuid: str = "", toName: str = "", toUuid: str = "", sceneId: str = "") -> Any:
+        sid, data = await self._scene(sceneId)
+        tokens = data.get("tokens", [])
+        a = self._pick_token(tokens, fromName, fromUuid, "first token")
+        b = self._pick_token(tokens, toName, toUuid, "second token")
+        size, unit = tactics.grid_of(data)
+        feet = tactics.distance_feet(a, b, data)
+        gap = tactics.gap_squares(a, b, size)
+        return {"from": a.get("name"), "to": b.get("name"), "feet": feet, "squaresBetween": gap, "adjacent": gap == 0,
+                "gridFeetPerSquare": unit}
+
+    async def _move_to_square(self, token: dict[str, Any], sid: str, spot: tuple[float, float]) -> Any:
+        return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": f"Scene.{sid}.Token.{token['_id']}", "x": spot[0], "y": spot[1]}, retry=True)
+
+    async def _move_adjacent(self, b: dict[str, Any]) -> Any:
+        sid, data = await self._scene(b.get("sceneId"))
+        tokens = data.get("tokens", [])
+        mover = self._pick_token(tokens, b.get("moverName", ""), b.get("moverUuid", ""), "mover")
+        target = self._pick_token(tokens, b.get("targetName", ""), b.get("targetUuid", ""), "target")
+        size, unit = tactics.grid_of(data)
+        if tactics.gap_squares(mover, target, size) == 0:
+            return {"moved": False, "note": f"{mover.get('name')} is already next to {target.get('name')}.", "feet": 0}
+        others = [t for t in tokens if t.get("_id") not in (mover.get("_id"), target.get("_id"))]
+        spot = tactics.square_next_to(mover, target, others, data)
+        if spot is None:
+            raise RelayError(f"No free square next to {target.get('name')}. Nothing was moved.")
+        feet = tactics.squares_moved((float(mover.get("x") or 0), float(mover.get("y") or 0)), spot, size) * unit
+        limit = float(b.get("maxFeet") or 0)
+        if limit and feet > limit:
+            raise RelayError(f"{mover.get('name')} would need to move {feet:g} ft, but the limit is {limit:g} ft. Nothing was moved.")
+        await self._move_to_square(mover, sid, spot)
+        return {"moved": True, "token": mover.get("name"), "to": {"x": spot[0], "y": spot[1]}, "feet": feet, "nextTo": target.get("name")}
+
+    async def _move_away(self, b: dict[str, Any]) -> Any:
+        sid, data = await self._scene(b.get("sceneId"))
+        tokens = data.get("tokens", [])
+        mover = self._pick_token(tokens, b.get("moverName", ""), b.get("moverUuid", ""), "mover")
+        origin = self._pick_token(tokens, b.get("fromName", ""), b.get("fromUuid", ""), "token to move away from")
+        size, unit = tactics.grid_of(data)
+        others = [t for t in tokens if t.get("_id") != mover.get("_id")]
+        spot = tactics.square_away(mover, origin, float(b["feet"]), others, data)
+        if spot is None:
+            raise RelayError(f"{mover.get('name')} has no free square to step back to. Nothing was moved.")
+        feet = tactics.squares_moved((float(mover.get("x") or 0), float(mover.get("y") or 0)), spot, size) * unit
+        await self._move_to_square(mover, sid, spot)
+        moved = {"moved": True, "token": mover.get("name"), "to": {"x": spot[0], "y": spot[1]}, "feet": feet}
+        moved["feetFrom"] = tactics.distance_feet({**mover, "x": spot[0], "y": spot[1]}, origin, data)
+        return moved
+
+    async def _hp_of(self, token: dict[str, Any], sid: str) -> dict[str, Any]:
+        """Hit points for one token. An unlinked token keeps its own current value on the token."""
+        actor_id = token.get("actorId")
+        if not actor_id:
+            return tactics.hp_line(str(token.get("name")), None, None)
+        try:
+            base = await self._actor_data(f"Actor.{actor_id}")
+        except RelayError:
+            base = {}
+        hp = ((base.get("system") or {}).get("attributes") or {}).get("hp") or {}
+        maximum = (hp.get("max") if hp.get("max") is not None else hp.get("value"))
+        value = hp.get("value")
+        if not token.get("actorLink"):
+            own = ((((token.get("delta") or {}).get("system") or {}).get("attributes") or {}).get("hp") or {})
+            if own.get("value") is not None:
+                value = own["value"]
+            if own.get("max") is not None:
+                maximum = own["max"]
+        out = tactics.hp_line(str(token.get("name")), value, maximum, hp.get("temp"))
+        out["uuid"] = f"Scene.{sid}.Token.{token.get('_id')}"
+        out["kind"] = base.get("type")
+        return out
+
+    async def _get_status(self, sceneId: str = "") -> Any:
+        sid, data = await self._scene(sceneId)
+        tokens = [t for t in data.get("tokens", []) if t.get("actorId")]
+        lines = await asyncio.gather(*[self._hp_of(t, sid) for t in tokens])
+        size, unit = tactics.grid_of(data)
+        for line, tok in zip(lines, tokens):
+            line["x"], line["y"] = tok.get("x"), tok.get("y")
+        try:
+            combats = await self._get_encounters()
+        except RelayError:
+            combats = []
+        fights = [{"id": c.get("id"), "round": c.get("round"), "active": c.get("active"), "started": c.get("started"),
+                   "sceneId": c.get("sceneId"), "up": tactics.current_combatant(c)} for c in combats or []]
+        rows = await self._chat_rows()
+        return {"scene": data.get("name"), "gridFeetPerSquare": unit, "tokens": lines, "combats": fights,
+                "chatLatestId": rows[-1].get("id") if rows else None}
+
+    @staticmethod
+    def _now() -> float:
+        import time
+
+        return time.monotonic()
+
+    async def _wait_for_player(self, alias: str, seconds: int, since_id: str | None, settle: int, watch_turn: bool) -> Any:
+        """Watch chat until the player is done: a done message, a turn change, or quiet after their last roll."""
+        start = self._now()
+        rows = await self._chat_rows()
+        since = since_id or (rows[-1].get("id") if rows else None)
+        marks = tactics.combat_marks(await self._get_encounters()) if watch_turn else []
+        who = alias.lower()
+        seen, last_roll, reason = 0, start, "timeout"
+        while self._now() - start < seconds:
+            await asyncio.sleep(3.0)
+            rows = await self._chat_rows() or rows
+            new = tactics.fresh_rows(rows, since)
+            if any(tactics.is_done_message(r) for r in new):
+                reason = "done"
+                break
+            mine = [r for r in new if r.get("rolls") and who in str(r.get("alias") or "").lower()]
+            if len(mine) > seen:
+                seen, last_roll = len(mine), self._now()
+            if watch_turn:
+                try:
+                    if tactics.combat_marks(await self._get_encounters()) != marks:
+                        reason = "turn_changed"
+                        break
+                except RelayError:
+                    pass
+            if seen and self._now() - last_roll >= settle:
+                reason = "settled"
+                break
+        new = tactics.fresh_rows(rows, since)
+        return {"reason": reason, "waited": round(self._now() - start), "latestId": rows[-1].get("id") if rows else since,
+                "hits": tactics.read_hits(new, alias)}
+
+    async def _get_wait_for_player(self, alias: str, seconds: int = 30, sinceId: str = "", settle: int = 8, watchTurn: bool = True) -> Any:
+        return await self._wait_for_player(alias, min(max(int(seconds), 3), 90), sinceId or None, min(max(int(settle), 3), 30), bool(watchTurn))
+
+    async def _apply_hits(self, b: dict[str, Any]) -> Any:
+        """Take the damage of every unapplied hit by this attacker off its target. Each damage roll is applied once."""
+        alias = str(b["alias"])
+        sid, data = await self._scene(b.get("sceneId"))
+        tokens = data.get("tokens", [])
+        rows = tactics.fresh_rows(await self._fga("GET", "/api/v1/chat", {"limit": 200}), b.get("sinceId") or None)
+        hits = tactics.read_hits(rows, alias)
+        applied: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        mine = [t for t in tokens if str(t.get("name", "")).lower() == alias.lower()]
+        actor: dict[str, Any] = {}
+        if len(mine) == 1 and mine[0].get("actorId"):
+            try:
+                actor = await self._actor_data(f"Actor.{mine[0]['actorId']}")
+            except RelayError:
+                actor = {}
+        for hit in hits:
+            if hit["outcome"] not in ("hit", "critical hit") or hit["damage"] is None:
+                continue
+            if hit["damageId"] in self._applied:
+                skipped.append({"weapon": hit["weapon"], "damage": hit["damage"], "why": "already applied"})
+                continue
+            try:
+                target = self._pick_token(tokens, hit["target"], "", "target")
+            except RelayError as exc:
+                skipped.append({"weapon": hit["weapon"], "damage": hit["damage"], "why": str(exc)})
+                continue
+            item = next((i for i in actor.get("items", []) if str(i.get("name", "")).lower() == str(hit["weapon"] or "").lower()), {})
+            types = (((item.get("system") or {}).get("damage") or {}).get("base") or {}).get("types") or []
+            result = await self._fga("POST", "/api/v1/damage", body={"uuid": f"Scene.{sid}.Token.{target['_id']}", "amount": hit["damage"], "mode": "damage", "type": types[0] if types else None})
+            self._applied.add(hit["damageId"])
+            row = {"weapon": hit["weapon"], "target": target.get("name"), "damage": hit["damage"], "critical": hit["outcome"] == "critical hit"}
+            if isinstance(result, dict):
+                row["hp"] = {"before": (result.get("before") or {}).get("value"), "after": (result.get("after") or {}).get("value"), "max": (result.get("after") or {}).get("max")}
+            applied.append(row)
+        return {"attacker": alias, "applied": applied, "skipped": skipped, "total": sum(a["damage"] for a in applied),
+                "note": None if hits else f"No attacks by {alias} found in recent chat."}
+
+    async def _rest_all(self, b: dict[str, Any]) -> Any:
+        sid, data = await self._scene(b.get("sceneId"))
+        kind = b.get("type") or "long"
+        names = {str(n).lower() for n in b.get("names") or []}
+        seen: set[str] = set()
+        done: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        for tok in data.get("tokens", []):
+            if not tok.get("actorId") or (names and str(tok.get("name", "")).lower() not in names):
+                continue
+            uuid = f"Actor.{tok['actorId']}" if tok.get("actorLink") else f"Scene.{sid}.Token.{tok['_id']}"
+            if uuid in seen:
+                continue
+            seen.add(uuid)
+            try:
+                res = await self._fga("POST", "/api/v1/rest", body={"uuid": uuid, "type": kind}, retry=True)
+                done.append({"name": tok.get("name"), "before": (res.get("before") or {}).get("value"), "after": (res.get("after") or {}).get("value"), "max": (res.get("after") or {}).get("max")})
+            except RelayError as exc:
+                failed.append({"name": tok.get("name"), "error": str(exc)})
+        return {"rest": kind, "rested": done, "failed": failed}
+
+    async def _end_all_combats(self) -> Any:
+        ended: list[Any] = []
+        for combat in await self._get_encounters() or []:
+            await self._fga("POST", "/api/v1/combat/control", body={"action": "end", "combatId": combat.get("id"), "confirm": True})
+            ended.append(combat.get("id"))
+        return {"ended": ended}
+
+    async def _attack(self, b: dict[str, Any]) -> Any:
+        """Attack once or several times. It checks reach and range first, and sets advantage or disadvantage."""
+        count = max(1, min(int(b.get("attacks") or 1), 6))
+        adv, dis = bool(b.get("advantage")), bool(b.get("disadvantage"))
+        info: dict[str, Any] = {}
+        if not b.get("ignoreDistance") and (b.get("targetUuid") or b.get("targetName")):
+            try:
+                actor = await self._actor_data(b["actorUuid"])
+                _uuid, item = self._find_item(b["actorUuid"], actor, b)
+                sid, data = await self._scene()
+                tokens = data.get("tokens", [])
+                actor_id = str(b["actorUuid"]).rsplit(".", 1)[-1] if str(b["actorUuid"]).startswith("Actor.") else str(actor.get("_id") or "")
+                mine = [t for t in tokens if t.get("actorId") == actor_id]
+                target = self._pick_token(tokens, b.get("targetName", ""), b.get("targetUuid", ""), "target")
+                if len(mine) == 1:
+                    _size, unit = tactics.grid_of(data)
+                    feet = tactics.distance_feet(mine[0], target, data)
+                    check = tactics.check_attack(item, feet, unit, b.get("autoDisadvantage", True) is not False, str(target.get("name")))
+                    info = {k: v for k, v in check.items() if k in ("feet", "kind", "reach", "range", "note")}
+                    if not check["ok"]:
+                        return {"attacker": actor.get("name"), "item": item.get("name"), "applied": False, "distance": info,
+                                "note": f"{check['note']} Nothing was rolled."}
+                    dis = dis or check["disadvantage"]
+            except RelayError:
+                info = {}
+        if adv and dis:
+            adv = dis = False
+            info["note"] = ((info.get("note") or "") + " Advantage and disadvantage cancel out.").strip()
+        results: list[dict[str, Any]] = []
+        for _ in range(count):
+            result = await self._attack_once({**b, "advantage": adv, "disadvantage": dis})
+            if info:
+                result["distance"] = info
+            if adv or dis:
+                result["rollMode"] = "advantage" if adv else "disadvantage"
+            results.append(result)
+            hp = result.get("hp") or {}
+            if hp.get("after") is not None and hp["after"] <= 0:
+                break
+        if count == 1:
+            return results[0]
+        return {"attacker": results[0].get("attacker"), "attacks": results,
+                "totalDamage": sum(r.get("damage") or 0 for r in results if r.get("applied"))}
+
     async def _use_item(self, b: dict[str, Any]) -> Any:
         actor_uuid = b["actorUuid"]
         item_uuid = b.get("abilityUuid")
@@ -498,4 +785,5 @@ class FgaClient(RelayClient):
         target = b.get("targetUuid")
         if not target and b.get("targetName"):
             target = await self._token_uuid(b["targetName"], None)
-        return await self._fga("POST", "/api/v1/items/use", body={"uuid": item_uuid, "targets": [target] if target else None, "clearArea": bool(b.get("clearArea")), "template": bool(b.get("template"))})
+        return await self._fga("POST", "/api/v1/items/use", body={"uuid": item_uuid, "targets": [target] if target else None, "clearArea": bool(b.get("clearArea")), "template": bool(b.get("template")),
+            "advantage": bool(b.get("advantage")) or None, "disadvantage": bool(b.get("disadvantage")) or None})

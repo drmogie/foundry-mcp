@@ -620,3 +620,19 @@ test("useItem leaves non-attack activities to the system", async () => {
   await c.useItem({ uuid: "Item.i1" });
   assert.deepEqual(calls, [undefined]);
 });
+
+test("useItem passes advantage and disadvantage to the attack roll", async () => {
+  const { w, c } = setup();
+  const item = w.docs.get("Item.i1");
+  const seen = [];
+  const activity = {
+    type: "attack",
+    use: async () => ({ message: { id: "m1" } }),
+    rollAttack: async (config) => { seen.push({ ...config }); }
+  };
+  item.system = { activities: { contents: [activity], get: () => activity } };
+  await c.useItem({ uuid: "Item.i1" });
+  await c.useItem({ uuid: "Item.i1", advantage: true });
+  await c.useItem({ uuid: "Item.i1", disadvantage: true });
+  assert.deepEqual(seen, [{}, { advantage: true }, { disadvantage: true }]);
+});

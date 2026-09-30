@@ -65,6 +65,11 @@ async def test_write_tools_register_only_when_asked():
         "foundry_create_journal",
         "foundry_roll_table",
         "foundry_import_from_pack",
+        "foundry_move_adjacent",
+        "foundry_move_away",
+        "foundry_apply_hits",
+        "foundry_rest_all",
+        "foundry_end_all_combats",
     }
 
 

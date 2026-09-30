@@ -357,7 +357,7 @@ export function makeCommands(ctx) {
       return { deleted: info };
     },
 
-    async useItem({ uuid, targets, activityId, clearArea, template } = {}) {
+    async useItem({ uuid, targets, activityId, clearArea, template, advantage, disadvantage } = {}) {
       const item = await find(uuid);
       if (item.documentName !== "Item") throw new Error(`${uuid} is not an item.`);
       if (Array.isArray(targets)) {
@@ -385,7 +385,10 @@ export function makeCommands(ctx) {
         // The system rolls the attack itself after a use, and opens its Attack Roll box
         // (weapons with attack modes always do). Turn that off and roll it here, box-free.
         const results = await activity.use({ ...useConfig, subsequentActions: false }, { configure: false }, {});
-        await activity.rollAttack({}, { configure: false }, { data: { system: { origin: results?.message?.id } } });
+        const roll = {};
+        if (advantage) roll.advantage = true;
+        if (disadvantage) roll.disadvantage = true;
+        await activity.rollAttack(roll, { configure: false }, { data: { system: { origin: results?.message?.id } } });
       } else if (activity) {
         await activity.use(useConfig, { configure: false }, {});
       } else {

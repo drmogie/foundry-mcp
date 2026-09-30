@@ -127,6 +127,9 @@ def test_long_replies_are_cut():
 
 
 EXPECTED_TOOLS = {
+    "foundry_status",
+    "foundry_distance",
+    "foundry_wait_for_player",
     "foundry_list_worlds",
     "foundry_world_info",
     "foundry_structure",

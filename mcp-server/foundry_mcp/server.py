@@ -412,8 +412,13 @@ async def foundry_attack(
     apply_for_players: Annotated[bool | None, Field(description="Take the hit points off when a player character (a character sheet) attacks. Default off. Set FOUNDRY_MCP_APPLY_PLAYER_HITS=true to change the default.")] = None,
     apply_for_npcs: Annotated[bool | None, Field(description="Take the hit points off when a non-player (an NPC sheet) attacks. Default on. Set FOUNDRY_MCP_APPLY_NPC_HITS=false to change the default.")] = None,
     wait_seconds: Annotated[int, Field(ge=3, le=40, description="How long to wait for the attack and damage rolls.")] = 15,
+    attacks: Annotated[int, Field(ge=1, le=6, description="How many attacks to make in a row, for Extra Attack. Stops early if the target drops to 0.")] = 1,
+    advantage: Annotated[bool, Field(description="Roll the attack with advantage.")] = False,
+    disadvantage: Annotated[bool, Field(description="Roll the attack with disadvantage.")] = False,
+    ignore_distance: Annotated[bool, Field(description="Skip the reach and range check.")] = False,
+    auto_disadvantage: Annotated[bool, Field(description="Give a ranged attack disadvantage when the target is within 5 ft, or past normal range.")] = True,
 ) -> str:
-    """D&D 5e: attack with a weapon or spell in one step. It rolls the attack, waits for the damage roll, and takes the hit points off the target when that kind of attacker is switched on. Players and non-players have separate switches. Needs the Rest Relay."""
+    """D&D 5e: attack with a weapon or spell in one step. It checks reach and range from the board first, and will not roll if the target is out of reach or range. Then it rolls the attack, waits for the damage roll, and takes the hit points off the target when that kind of attacker is switched on. Players and non-players have separate switches. Needs the Rest Relay."""
     if (problem := _needs_fga()) is not None:
         return problem
     if bool(ability_name) == bool(ability_uuid):
@@ -430,6 +435,11 @@ async def foundry_attack(
             "applyPlayers": _switch(apply_for_players, "FOUNDRY_MCP_APPLY_PLAYER_HITS", False),
             "applyNpcs": _switch(apply_for_npcs, "FOUNDRY_MCP_APPLY_NPC_HITS", True),
             "waitSeconds": wait_seconds,
+            "attacks": attacks,
+            "advantage": advantage,
+            "disadvantage": disadvantage,
+            "ignoreDistance": ignore_distance,
+            "autoDisadvantage": auto_disadvantage,
         },
     )
 
@@ -448,6 +458,107 @@ async def foundry_move_token(
     return await _write(
         "POST", "/move-token", body={"x": x, "y": y, "uuid": uuid, "name": name, "sceneId": scene_id, "animate": animate}
     )
+
+
+async def foundry_move_adjacent(
+    mover_name: str = "",
+    mover_uuid: str = "",
+    target_name: str = "",
+    target_uuid: str = "",
+    max_feet: Annotated[float, Field(ge=0, description="Speed limit. If the walk is longer, nothing moves. 0 means no limit.")] = 0,
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Move one token to the free square next to another token, the closest one to where it stands. Good before a melee attack. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/tactics/move-adjacent", body={"moverName": mover_name, "moverUuid": mover_uuid, "targetName": target_name,
+                                                                 "targetUuid": target_uuid, "maxFeet": max_feet, "sceneId": scene_id})
+
+
+async def foundry_move_away(
+    feet: Annotated[float, Field(gt=0, description="How far to step back, in feet.")],
+    mover_name: str = "",
+    mover_uuid: str = "",
+    from_name: str = "",
+    from_uuid: str = "",
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Move one token straight away from another token, up to some feet, stopping short if the way is blocked. Good for an archer before a shot. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/tactics/move-away", body={"moverName": mover_name, "moverUuid": mover_uuid, "fromName": from_name,
+                                                             "fromUuid": from_uuid, "feet": feet, "sceneId": scene_id})
+
+
+async def foundry_apply_hits(
+    alias: Annotated[str, Field(description="Who attacked, as shown in chat. For example Po Tato.")],
+    since_id: Annotated[str, Field(description="Only look at chat after this message id. Use chatLatestId from foundry_status or latestId from foundry_wait_for_player.")] = "",
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Take the damage of a player's hits off their targets, reading the attacks from chat. Each damage roll is applied once, so it is safe to call again. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/tactics/apply-hits", body={"alias": alias, "sinceId": since_id, "sceneId": scene_id})
+
+
+async def foundry_rest_all(
+    rest_type: Annotated[str, Field(description="long or short.")] = "long",
+    names: Annotated[list[str] | None, Field(description="Only these token names. Leave out for every token on the scene.")] = None,
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """D&D 5e: rest every token on the scene in one call. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _write("POST", "/rest-all", body={"type": rest_type, "names": names, "sceneId": scene_id})
+
+
+async def foundry_end_all_combats(
+    confirm: Annotated[bool, Field(description="Must be true. Ending removes the combats.")] = False,
+) -> str:
+    """End every combat in the world, including ones on no scene. Needs confirm=true."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if not confirm:
+        return "Error: This ends every combat. Nothing ended. Call again with confirm=true."
+    return await _write("POST", "/combat/end-all", body={"confirm": True})
+
+
+@mcp.tool()
+async def foundry_status(
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Who is on the board: hit points, bloodied or down, position, plus the combats and whose turn it is, and the latest chat message id. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/status", sceneId=scene_id)
+
+
+@mcp.tool()
+async def foundry_distance(
+    from_name: str = "",
+    from_uuid: str = "",
+    to_name: str = "",
+    to_uuid: str = "",
+    scene_id: Annotated[str, Field(description="Defaults to the scene that is showing.")] = "",
+) -> str:
+    """Feet between two tokens on the board, and whether they are next to each other. A diagonal counts as one square. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/distance", fromName=from_name, fromUuid=from_uuid, toName=to_name, toUuid=to_uuid, sceneId=scene_id)
+
+
+@mcp.tool()
+async def foundry_wait_for_player(
+    alias: Annotated[str, Field(description="The player's character as shown in chat. For example Po Tato.")],
+    seconds: Annotated[int, Field(ge=3, le=90, description="Longest time to wait.")] = 30,
+    since_id: Annotated[str, Field(description="Only look at chat after this message id. Leave empty to start from now.")] = "",
+    settle: Annotated[int, Field(ge=3, le=30, description="Seconds of quiet after their last roll that mean they are finished.")] = 8,
+    watch_turn: Annotated[bool, Field(description="Also stop when the combat turn changes.")] = True,
+) -> str:
+    """Wait for a player to finish their turn. Stops on a chat message that says done, a turn change, or quiet after their last roll. Returns their attacks and the latest chat id. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    return await _run("/wait-for-player", alias=alias, seconds=seconds, sinceId=since_id, settle=settle, watchTurn=watch_turn)
 
 
 def _needs_fga() -> str | None:
@@ -488,6 +599,14 @@ async def foundry_combat_turn(
         return problem
     if action == "end" and not confirm:
         return "Error: Ending combat removes it. Nothing ended. Call again with confirm=true to end it."
+    if not combat_id:
+        try:
+            combats = await client().get("/encounters")
+        except RelayError:
+            combats = []
+        if isinstance(combats, list) and len(combats) > 1:
+            listing = "; ".join(f"{c.get('id')} (round {c.get('round')}, {'active' if c.get('active') else 'not active'})" for c in combats)
+            return f"Error: {len(combats)} combats exist, so I will not guess which one. Pass combat_id. Combats: {listing}. Nothing was changed."
     return await _write("POST", "/combat/control", body={"action": action, "combatId": combat_id, "confirm": confirm or None})
 
 
@@ -801,6 +920,11 @@ WRITE_TOOLS = (
     foundry_create_journal,
     foundry_roll_table,
     foundry_import_from_pack,
+    foundry_move_adjacent,
+    foundry_move_away,
+    foundry_apply_hits,
+    foundry_rest_all,
+    foundry_end_all_combats,
 )
 
 
