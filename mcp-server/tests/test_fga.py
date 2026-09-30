@@ -493,6 +493,117 @@ def test_all_new_write_tools_are_offered_when_writes_are_on():
     server.register_write_tools(m)
     names = {t.name for t in m._tool_manager.list_tools()}
     for want in ("foundry_condition", "foundry_death_save", "foundry_check", "foundry_spend_resource", "foundry_target",
-                 "foundry_add_token", "foundry_set_token", "foundry_create_journal", "foundry_roll_table", "foundry_import_from_pack"):
+                 "foundry_add_token", "foundry_set_token", "foundry_create_journal", "foundry_roll_table", "foundry_import_from_pack",
+                 "foundry_attack"):
         assert want in names
-    assert len(names) == 22
+    assert len(names) == 23
+
+
+# ----- attack in one step, players and non-players split -----
+
+class AttackRelay(Relay):
+    """Adds a use-item answer, a last-attack answer that changes after the use, and a damage answer."""
+
+    def __init__(self, actor_type="character", outcome="hit", damage=8, pending=False, ready=True):
+        super().__init__()
+        self.actor_type, self.outcome, self.damage, self.pending, self.ready = actor_type, outcome, damage, pending, ready
+        self.used = False
+
+    def __call__(self, request):
+        path = request.url.path
+        if path == "/api/v1/document" and request.method == "GET" and request.url.params["uuid"].startswith("Actor."):
+            self.calls.append((request.method, path, dict(request.url.params), None))
+            sheet = json.loads(json.dumps(BOB))
+            sheet["type"] = self.actor_type
+            sheet["items"][0]["system"]["damage"] = {"base": {"types": ["piercing"]}}
+            return httpx.Response(200, json={"ok": True, "data": {"uuid": "x", "name": "Bob", "data": sheet}})
+        if path == "/api/v1/items/use":
+            self.calls.append((request.method, path, dict(request.url.params), json.loads(request.content)))
+            self.used = True
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"ok": True, "data": {"used": {"name": "Shortbow"}, "targets": body.get("targets") or []}})
+        if path == "/api/v1/last-attack":
+            self.calls.append((request.method, path, dict(request.url.params), None))
+            if not (self.used and self.ready):
+                return httpx.Response(200, json={"ok": True, "data": {"attack": {"total": 3}, "outcome": "miss", "target": "Old", "ac": 10, "damage": None, "pending": False}})
+            dmg = None if self.pending else ({"total": self.damage} if self.outcome != "miss" else None)
+            return httpx.Response(200, json={"ok": True, "data": {"attack": {"total": 21}, "outcome": self.outcome, "target": "Foreman", "ac": 18, "damage": dmg, "pending": self.pending and self.outcome != "miss"}})
+        if path == "/api/v1/damage":
+            self.calls.append((request.method, path, dict(request.url.params), json.loads(request.content)))
+            return httpx.Response(200, json={"ok": True, "data": {"before": {"value": 95, "max": 103}, "after": {"value": 87, "max": 103}}})
+        return super().__call__(request)
+
+
+@pytest.fixture
+def attack_relay(monkeypatch):
+    async def quick(_seconds):
+        return None
+    monkeypatch.setattr("foundry_mcp.fga.asyncio.sleep", quick)
+    def make(**kw):
+        r = AttackRelay(**kw)
+        monkeypatch.setattr(server, "_client", FgaClient(base_url="http://relay", api_key="fgat_test", transport=httpx.MockTransport(r)))
+        return r
+    return make
+
+
+def _damage_calls(r):
+    return [c for c in r.calls if c[1] == "/api/v1/damage"]
+
+
+async def test_attack_by_npc_applies_damage_by_default(attack_relay, monkeypatch):
+    monkeypatch.delenv("FOUNDRY_MCP_APPLY_NPC_HITS", raising=False)
+    r = attack_relay(actor_type="npc")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert out["kind"] == "npc" and out["applied"] is True and out["damage"] == 8
+    assert out["hp"] == {"before": 95, "after": 87, "max": 103}
+    assert _damage_calls(r)[0][3] == {"uuid": "Scene.s1.Token.t2", "amount": 8, "mode": "damage", "type": "piercing"}
+
+
+async def test_attack_by_player_does_not_apply_by_default(attack_relay, monkeypatch):
+    monkeypatch.delenv("FOUNDRY_MCP_APPLY_PLAYER_HITS", raising=False)
+    r = attack_relay(actor_type="character")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert out["kind"] == "player" and out["applied"] is False and out["damage"] == 8
+    assert "off for players" in out["note"]
+    assert _damage_calls(r) == []
+
+
+async def test_attack_switches_are_separate(attack_relay):
+    r = attack_relay(actor_type="character")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", apply_for_players=True))
+    assert out["applied"] is True and len(_damage_calls(r)) == 1
+    r2 = attack_relay(actor_type="npc")
+    out2 = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", apply_for_npcs=False))
+    assert out2["applied"] is False and _damage_calls(r2) == []
+
+
+async def test_attack_switch_defaults_come_from_the_environment(attack_relay, monkeypatch):
+    monkeypatch.setenv("FOUNDRY_MCP_APPLY_PLAYER_HITS", "true")
+    r = attack_relay(actor_type="character")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert out["applied"] is True and len(_damage_calls(r)) == 1
+
+
+async def test_attack_miss_and_unrolled_damage_change_nothing(attack_relay):
+    r = attack_relay(actor_type="npc", outcome="miss")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2"))
+    assert out["outcome"] == "miss" and out["applied"] is False and _damage_calls(r) == []
+    r = attack_relay(actor_type="npc", pending=True)
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", wait_seconds=3))
+    assert out["applied"] is False and "no damage was rolled" in out["note"] and _damage_calls(r) == []
+
+
+async def test_attack_without_a_new_roll_or_target(attack_relay):
+    r = attack_relay(actor_type="npc", ready=False)
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow", target_uuid="Scene.s1.Token.t2", wait_seconds=3))
+    assert "No new attack roll" in out["note"] and _damage_calls(r) == []
+    r = attack_relay(actor_type="npc")
+    out = json.loads(await server.foundry_attack("Actor.a1", ability_name="shortbow"))
+    assert out["applied"] is False and "no target" in out["note"].lower()
+
+
+async def test_attack_needs_one_item_and_a_known_item(attack_relay):
+    attack_relay(actor_type="npc")
+    assert "exactly one" in await server.foundry_attack("Actor.a1")
+    out = await server.foundry_attack("Actor.a1", ability_name="Banana")
+    assert out.startswith("Error:") and "no item called Banana" in out

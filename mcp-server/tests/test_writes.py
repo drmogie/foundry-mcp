@@ -49,6 +49,7 @@ async def test_write_tools_register_only_when_asked():
         "foundry_delete",
         "foundry_switch_scene",
         "foundry_use_item",
+        "foundry_attack",
         "foundry_move_token",
         "foundry_start_combat",
         "foundry_combat_turn",

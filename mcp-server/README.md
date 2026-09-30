@@ -1,6 +1,6 @@
 # Foundry MCP server
 
-Version: 2026.09.29.10
+Version: 2026.09.29.11
 
 Lets Claude read a Foundry VTT world.
 It talks to the Foundry VTT MCP & Rest Relay add-on.
@@ -64,6 +64,11 @@ Set `FOUNDRY_ALLOW_WRITES` to `true` to turn them on. Twenty-two tools appear:
 - foundry_delete: delete one document. Needs `confirm=true`
 - foundry_switch_scene: make a scene active
 - foundry_use_item: D&D 5e, make an actor use an item (good for testing mods)
+- foundry_attack: D&D 5e, attack in one step. It rolls the attack, waits for the damage roll and takes the hit points off the target. Players and non-players have separate switches:
+  - `apply_for_players` (default off) for a player character sheet.
+  - `apply_for_npcs` (default on) for an NPC sheet.
+  - Set the defaults once with the environment variables `FOUNDRY_MCP_APPLY_PLAYER_HITS` and `FOUNDRY_MCP_APPLY_NPC_HITS` (true or false).
+  - It stops and says so on a miss, when no damage was rolled, or when there is no target.
 - foundry_move_token: move a token
 - foundry_start_combat: make a combat, add tokens, roll initiative, start
 - foundry_combat_turn: start, next turn, next round, roll initiative, or end. End needs `confirm=true`

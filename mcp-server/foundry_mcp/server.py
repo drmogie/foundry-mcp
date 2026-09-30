@@ -393,6 +393,47 @@ async def foundry_use_item(
     )
 
 
+def _switch(value: bool | None, env_name: str, default: bool) -> bool:
+    """A yes or no from the call, else from the environment, else the default."""
+    if value is not None:
+        return value
+    raw = os.environ.get(env_name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+async def foundry_attack(
+    actor_uuid: str,
+    ability_name: Annotated[str, Field(description="Item name, if you have no uuid.")] = "",
+    ability_uuid: str = "",
+    target_uuid: str = "",
+    target_name: str = "",
+    apply_for_players: Annotated[bool | None, Field(description="Take the hit points off when a player character (a character sheet) attacks. Default off. Set FOUNDRY_MCP_APPLY_PLAYER_HITS=true to change the default.")] = None,
+    apply_for_npcs: Annotated[bool | None, Field(description="Take the hit points off when a non-player (an NPC sheet) attacks. Default on. Set FOUNDRY_MCP_APPLY_NPC_HITS=false to change the default.")] = None,
+    wait_seconds: Annotated[int, Field(ge=3, le=40, description="How long to wait for the attack and damage rolls.")] = 15,
+) -> str:
+    """D&D 5e: attack with a weapon or spell in one step. It rolls the attack, waits for the damage roll, and takes the hit points off the target when that kind of attacker is switched on. Players and non-players have separate switches. Needs the Rest Relay."""
+    if (problem := _needs_fga()) is not None:
+        return problem
+    if bool(ability_name) == bool(ability_uuid):
+        return "Error: give exactly one of ability_name or ability_uuid."
+    return await _write(
+        "POST",
+        "/dnd5e/attack",
+        body={
+            "actorUuid": actor_uuid,
+            "abilityName": ability_name,
+            "abilityUuid": ability_uuid,
+            "targetUuid": target_uuid,
+            "targetName": target_name,
+            "applyPlayers": _switch(apply_for_players, "FOUNDRY_MCP_APPLY_PLAYER_HITS", False),
+            "applyNpcs": _switch(apply_for_npcs, "FOUNDRY_MCP_APPLY_NPC_HITS", True),
+            "waitSeconds": wait_seconds,
+        },
+    )
+
+
 async def foundry_move_token(
     x: float,
     y: float,
@@ -744,6 +785,7 @@ WRITE_TOOLS = (
     foundry_delete,
     foundry_switch_scene,
     foundry_use_item,
+    foundry_attack,
     foundry_move_token,
     foundry_start_combat,
     foundry_combat_turn,

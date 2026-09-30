@@ -3,6 +3,7 @@ so every tool keeps its name and its answers keep their shape as far as we can."
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import sys
 from typing import Any
@@ -267,6 +268,8 @@ class FgaClient(RelayClient):
             return await self._fga("POST", "/api/v1/scene/switch", body={"id": b.get("sceneId"), "name": b.get("name"), "activate": True})
         if endpoint == "/dnd5e/use-item":
             return await self._use_item(b)
+        if endpoint == "/dnd5e/attack":
+            return await self._attack(b)
         if endpoint == "/move-token":
             uuid = b.get("uuid") or await self._token_uuid(b["name"], b.get("sceneId"))
             return await self._fga("POST", "/api/v1/tokens/move", body={"uuid": uuid, "x": b["x"], "y": b["y"]})
@@ -390,17 +393,86 @@ class FgaClient(RelayClient):
             raise RelayError(f"{len(matches)} tokens are called {name}. Use a uuid instead. Nothing was changed.")
         return f"Scene.{scene['id']}.Token.{matches[0]['_id']}"
 
+    @staticmethod
+    def _find_item(actor_uuid: str, actor: dict[str, Any], b: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        """The item to use, by uuid or by name, with its data. Nothing is changed when it is missing."""
+        items = actor.get("items", [])
+        wanted_uuid = b.get("abilityUuid")
+        if wanted_uuid:
+            item_id = str(wanted_uuid).rsplit(".", 1)[-1]
+            match = next((i for i in items if i.get("_id") == item_id), {})
+            return wanted_uuid, match
+        wanted = str(b["abilityName"]).lower()
+        hits = [i for i in items if str(i.get("name", "")).lower() == wanted]
+        if not hits:
+            names = ", ".join(sorted(str(i.get("name")) for i in items))[:300]
+            raise RelayError(f"{actor.get('name')} has no item called {b['abilityName']}. Items: {names}. Nothing was changed.")
+        return f"{actor_uuid}.Item.{hits[0]['_id']}", hits[0]
+
+    async def _latest_attack(self, alias: str) -> Any:
+        try:
+            return await self._get_last_attack(alias=alias, limit=60)
+        except RelayError:
+            return None
+
+    async def _attack(self, b: dict[str, Any]) -> Any:
+        """Use a weapon or spell, wait for the damage roll, and apply it when this kind of attacker is switched on."""
+        actor_uuid = b["actorUuid"]
+        actor = await self._actor_data(actor_uuid)
+        item_uuid, item = self._find_item(actor_uuid, actor, b)
+        alias = str(actor.get("name") or "")
+        kind = "player" if actor.get("type") == "character" else "npc"
+        apply_it = bool(b.get("applyPlayers") if kind == "player" else b.get("applyNpcs"))
+        before = await self._latest_attack(alias)
+        used = await self._use_item({**b, "abilityUuid": item_uuid})
+        targets = used.get("targets") if isinstance(used, dict) else None
+        target = targets[0] if targets else None
+        result: dict[str, Any] = {"attacker": alias, "kind": kind, "item": (used.get("used") or {}).get("name") if isinstance(used, dict) else None, "applied": False}
+        seen: Any = None
+        for _ in range(int(b.get("waitSeconds") or 15)):
+            await asyncio.sleep(1.0)
+            seen = await self._latest_attack(alias)
+            if not seen or seen == before or not seen.get("attack"):
+                continue
+            if seen.get("outcome") in ("hit", "critical hit") and seen.get("pending"):
+                continue
+            break
+        else:
+            seen = seen if seen and seen != before else None
+        if not seen or seen == before or not seen.get("attack"):
+            result["note"] = "No new attack roll showed up in chat. Nothing was applied."
+            return result
+        outcome = str(seen.get("outcome") or "")
+        result.update({"target": seen.get("target"), "outcome": outcome, "attackTotal": (seen.get("attack") or {}).get("total"), "ac": seen.get("ac")})
+        if outcome not in ("hit", "critical hit"):
+            result["note"] = "The attack missed. No damage."
+            return result
+        damage = seen.get("damage")
+        if seen.get("pending") or not damage:
+            result["note"] = "It hit, but no damage was rolled yet. Nothing was applied."
+            return result
+        total = damage.get("total")
+        types = (((item.get("system") or {}).get("damage") or {}).get("base") or {}).get("types") or []
+        damage_type = types[0] if types else None
+        result.update({"damage": total, "damageType": damage_type})
+        if not apply_it:
+            result["note"] = f"Damage was not applied, because automatic damage is off for {kind}s. Use foundry_apply_damage."
+            return result
+        if not target:
+            result["note"] = "There was no target to apply the damage to."
+            return result
+        hit = await self._fga("POST", "/api/v1/damage", body={"uuid": target, "amount": total, "mode": "damage", "type": damage_type})
+        result["applied"] = True
+        if isinstance(hit, dict):
+            result["hp"] = {"before": (hit.get("before") or {}).get("value"), "after": (hit.get("after") or {}).get("value"), "max": (hit.get("after") or {}).get("max")}
+        return result
+
     async def _use_item(self, b: dict[str, Any]) -> Any:
         actor_uuid = b["actorUuid"]
         item_uuid = b.get("abilityUuid")
         if not item_uuid:
             actor = await self._actor_data(actor_uuid)
-            wanted = str(b["abilityName"]).lower()
-            hits = [i for i in actor.get("items", []) if str(i.get("name", "")).lower() == wanted]
-            if not hits:
-                names = ", ".join(sorted(str(i.get("name")) for i in actor.get("items", [])))[:300]
-                raise RelayError(f"{actor.get('name')} has no item called {b['abilityName']}. Items: {names}. Nothing was changed.")
-            item_uuid = f"{actor_uuid}.Item.{hits[0]['_id']}"
+            item_uuid, _item = self._find_item(actor_uuid, actor, b)
         target = b.get("targetUuid")
         if not target and b.get("targetName"):
             target = await self._token_uuid(b["targetName"], None)

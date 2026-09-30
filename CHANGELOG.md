@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.29.12
+- mcp-server 2026.09.29.11 only. Relay and module are unchanged (relay 2026.09.29.12, module 2026.09.29.12).
+- New tool `foundry_attack`: attack in one step, wait for the damage roll, and apply it. Separate switches for players and non-players (`apply_for_players`, `apply_for_npcs`, or the environment variables `FOUNDRY_MCP_APPLY_PLAYER_HITS` and `FOUNDRY_MCP_APPLY_NPC_HITS`).
+
 ## 2026.09.29.11
 - Relay 2026.09.29.12, module 2026.09.29.12, mcp-server 2026.09.29.10. Update all three.
 - `foundry_use_item` skips the click-to-place spell area by default. `place_template` turns it back on.
