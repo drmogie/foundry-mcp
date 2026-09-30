@@ -595,3 +595,28 @@ test("useItem does not ask for a template unless told to", async () => {
   await c.useItem({ uuid: "Item.i1", template: true });
   assert.deepEqual(seen, [false, true]);
 });
+
+test("useItem rolls a lone attack activity itself, with no Attack Roll box", async () => {
+  const { w, c } = setup();
+  const item = w.docs.get("Item.i1");
+  const calls = [];
+  const activity = {
+    type: "attack",
+    use: async (config, dialog) => { calls.push(["use", config.subsequentActions, dialog.configure]); return { message: { id: "m1" } }; },
+    rollAttack: async (config, dialog, message) => { calls.push(["roll", dialog.configure, message.data.system.origin]); }
+  };
+  item.system = { activities: { contents: [activity], get: () => activity } };
+  item.use = async () => { calls.push(["item.use"]); };
+  await c.useItem({ uuid: "Item.i1" });
+  assert.deepEqual(calls, [["use", false, false], ["roll", false, "m1"]]);
+});
+
+test("useItem leaves non-attack activities to the system", async () => {
+  const { w, c } = setup();
+  const item = w.docs.get("Item.i1");
+  const calls = [];
+  const activity = { type: "save", use: async (config) => { calls.push(config.subsequentActions); } };
+  item.system = { activities: { contents: [activity], get: () => activity } };
+  await c.useItem({ uuid: "Item.i1" });
+  assert.deepEqual(calls, [undefined]);
+});

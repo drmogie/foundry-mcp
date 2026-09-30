@@ -1,6 +1,6 @@
 # FGA Relay Connect
 
-Version: 2026.09.29.12
+Version: 2026.09.29.13
 
 Foundry module that links one browser to your Foundry VTT MCP & Rest Relay (add-on in https://github.com/drmogie/ha-foundry-vtt-addon).
 
@@ -24,6 +24,10 @@ Settings are per browser. Players leave it off.
     node --test tests/link.test.mjs tests/commands.test.mjs tests/extras.test.mjs tests/indicators.test.mjs
 
 ## Changelog
+### 2026.09.29.13
+
+- Using a weapon or spell with one attack activity now rolls the attack from the module, with no dialog. Before, the system opened its Attack Roll box on the GM screen, most often for weapons with attack modes like a Longsword.
+
 ### 2026.09.29.12
 
 - Using an item no longer asks anyone to click the board to place a spell area. Pass template to place one.

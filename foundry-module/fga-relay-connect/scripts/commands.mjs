@@ -371,12 +371,25 @@ export function makeCommands(ctx) {
       }
       const startScene = game.scenes.viewed ?? game.scenes.active;
       const before = new Set((startScene?.regions?.contents ?? []).map((r) => r.id));
+      const useConfig = { create: { measuredTemplate: !!template } };
+      let activity = null;
       if (activityId) {
-        const activity = item.system?.activities?.get?.(activityId);
+        activity = item.system?.activities?.get?.(activityId);
         if (!activity) throw new Error(`No activity ${activityId} on ${item.name}.`);
-        await activity.use({ create: { measuredTemplate: !!template } }, { configure: false }, {});
       } else {
-        await item.use({ create: { measuredTemplate: !!template } }, { configure: false });
+        // An item with one activity uses that activity, so we can tell if it is an attack.
+        const all = item.system?.activities?.contents;
+        if (Array.isArray(all) && all.length === 1) activity = all[0];
+      }
+      if (activity && activity.type === "attack" && typeof activity.rollAttack === "function") {
+        // The system rolls the attack itself after a use, and opens its Attack Roll box
+        // (weapons with attack modes always do). Turn that off and roll it here, box-free.
+        const results = await activity.use({ ...useConfig, subsequentActions: false }, { configure: false }, {});
+        await activity.rollAttack({}, { configure: false }, { data: { system: { origin: results?.message?.id } } });
+      } else if (activity) {
+        await activity.use(useConfig, { configure: false }, {});
+      } else {
+        await item.use(useConfig, { configure: false });
       }
       const out = { used: brief(item), targets: targets ?? [] };
       // Spells with a template leave a Region on the scene. Report it, and remove it on request.
